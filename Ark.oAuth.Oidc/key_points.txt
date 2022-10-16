@@ -1,0 +1,6 @@
+ - create .nuspec file
+> nuget spec
+> 
+
+- https://blog.blackballsoftware.com/posts/2018/9/20/installing-contentfiles-and-assemblies-with-aspnet-core-and-nuget
+- nuget with css

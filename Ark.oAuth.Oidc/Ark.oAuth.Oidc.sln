@@ -7,7 +7,16 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Test.Csle", "Test.Csle\Test
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ark.oAuth.Oidc", "Ark.oAuth.Oidc\Ark.oAuth.Oidc.csproj", "{DB98E623-29C4-4B25-AA4D-BECA8C1D0477}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.oAuth.Oidc.Web", "Ark.oAuth.Oidc.Web\Ark.oAuth.Oidc.Web.csproj", "{83729189-BD73-4603-8DFD-93EDF3656D03}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ark.oAuth.Oidc.Web", "Ark.oAuth.Oidc.Web\Ark.oAuth.Oidc.Web.csproj", "{83729189-BD73-4603-8DFD-93EDF3656D03}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7CC1C75B-B414-4E68-B2D9-C3ED5A1A6B06}"
+	ProjectSection(SolutionItems) = preProject
+		Ark.oAuth.Oidc\Ark.oAuth.Oidc.nuspec = Ark.oAuth.Oidc\Ark.oAuth.Oidc.nuspec
+		key_points.txt = key_points.txt
+		nuget.config = nuget.config
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.EfCore", "Ark.EfCore\Ark.EfCore.csproj", "{93A783DF-D51C-49FA-83C2-F30744BEAB0C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,6 +36,10 @@ Global
 		{83729189-BD73-4603-8DFD-93EDF3656D03}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|Any CPU.Build.0 = Release|Any CPU
+		{93A783DF-D51C-49FA-83C2-F30744BEAB0C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{93A783DF-D51C-49FA-83C2-F30744BEAB0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{93A783DF-D51C-49FA-83C2-F30744BEAB0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{93A783DF-D51C-49FA-83C2-F30744BEAB0C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
