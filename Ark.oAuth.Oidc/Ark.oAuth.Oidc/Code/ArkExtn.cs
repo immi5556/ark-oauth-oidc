@@ -24,7 +24,6 @@ namespace Ark.oAuth.Oidc.Code
                 var filePath = name;
 
                 // Embedded files are prefixed with the full namespace of the assembly, so your file is stored at wwwroot/foundation.css, then
-                // your embedded name is Foundation.UI.Web.Core.wwwroot.foundation.css
                 // Here, we strip the assembly name from the start - note the following '.' too
                 filePath = filePath.Replace(assemblyName + ".", "");
 

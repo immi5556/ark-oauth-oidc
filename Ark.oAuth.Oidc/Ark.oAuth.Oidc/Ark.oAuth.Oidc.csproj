@@ -16,17 +16,22 @@
 	  <Content Remove="wwwroot\css\ark-oauth-login.css" />
 	  <Content Remove="wwwroot\img\ark_idp.png" />
 	  <Content Remove="wwwroot\img\ark_oauth_logo.png" />
+	  <Content Remove="wwwroot\img\imm_c_dev_1.png" />
 	  <Content Remove="wwwroot\img\oauth-bg.jpg" />
+	  <Content Remove="wwwroot\img\security_1.jpg" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <EmbeddedResource Include="wwwroot\css\ark-oauth-login.css" />
 	  <EmbeddedResource Include="wwwroot\img\ark_idp.png" />
 	  <EmbeddedResource Include="wwwroot\img\ark_oauth_logo.png" />
+	  <EmbeddedResource Include="wwwroot\img\imm_c_dev_1.png" />
 	  <EmbeddedResource Include="wwwroot\img\oauth-bg.jpg" />
+	  <EmbeddedResource Include="wwwroot\img\security_1.jpg" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="7.0.0-rc.2.22472.11" />
+	  <PackageReference Include="Ark.EfCore" Version="0.0.1.1" />
+	  <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
 	</ItemGroup>
 </Project>

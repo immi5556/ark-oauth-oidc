@@ -1,3 +1,13 @@
+- oauth2 basics
+
+> https://medium.com/@robert.broeckelmann/oauth2-access-token-usage-strategies-for-multiple-resources-apis-part-2-304bab2570a9
+> 
+> https://www.pingidentity.com/en/resources/blog/post/oauth-2-access-token-usage-strategies-multiple-resources-apis-pt-2.html
+
+> list of endpoints
+
+https://developer.okta.com/docs/reference/api/oidc/#endpoints
+
  - create .nuspec file
 > nuget spec
 > 

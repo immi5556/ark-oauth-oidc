@@ -16,7 +16,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		nuget.config = nuget.config
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.EfCore", "Ark.EfCore\Ark.EfCore.csproj", "{93A783DF-D51C-49FA-83C2-F30744BEAB0C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.oAuth.Client", "Ark.oAuth.Client\Ark.oAuth.Client.csproj", "{5CB2A48F-101D-4C21-A206-A2E122BC4574}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -36,10 +36,10 @@ Global
 		{83729189-BD73-4603-8DFD-93EDF3656D03}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|Any CPU.Build.0 = Release|Any CPU
-		{93A783DF-D51C-49FA-83C2-F30744BEAB0C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{93A783DF-D51C-49FA-83C2-F30744BEAB0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{93A783DF-D51C-49FA-83C2-F30744BEAB0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{93A783DF-D51C-49FA-83C2-F30744BEAB0C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

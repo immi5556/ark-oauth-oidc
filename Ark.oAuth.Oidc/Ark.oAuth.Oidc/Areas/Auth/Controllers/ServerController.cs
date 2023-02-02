@@ -6,6 +6,14 @@ namespace Ark.oAuth.Oidc.Areas.Auth.Controllers
     [Route("auth/server")]
     public class ServerController : Controller
     {
+        ArkSetting _setting;
+        TokenServer _tokenserver;
+        public ServerController(ArkSetting setting,
+            TokenServer tokenserver)
+        {
+            _setting = setting;
+            _tokenserver = tokenserver;
+        }
         [Route("")]
         public IActionResult Index()
         {
