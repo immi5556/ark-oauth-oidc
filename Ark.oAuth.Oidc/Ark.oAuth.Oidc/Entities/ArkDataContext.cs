@@ -26,8 +26,6 @@ namespace Ark.oAuth.Oidc
                 .HasIndex(prop => prop.email);
             modelBuilder.Entity<ServiceAccount>()
                 .HasIndex(prop => prop.account_id);
-
-            //DatabaseSeed.FullDataSeed(modelBuilder);
         }
         public ArkDataContext(DbContextOptions<ArkDataContext> options) : base(options) { }
     }

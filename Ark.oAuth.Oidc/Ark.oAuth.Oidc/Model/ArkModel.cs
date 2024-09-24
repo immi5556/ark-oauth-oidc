@@ -2,9 +2,7 @@
 {
     public class ArkSetting
     {
-        public bool is_server { get; set; }
-        public bool is_client { get { return oidc_client != null; } }
-        public ArkProject oidc_client { get; set; }
+        public ArkProject oidc_project { get; set; }
     }
     public class ArkJwt
     {
