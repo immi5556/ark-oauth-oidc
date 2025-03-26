@@ -29,8 +29,6 @@ namespace Ark.oAuth.Oidc
         }
         //protected override void OnConfiguring(DbContextOptionsBuilder options)
         //=> options.UseSqlite($"Data Source=./data/ntt_auth.db");
-        //protected override void OnConfiguring(DbContextOptionsBuilder options)
-        //=> options.UseMySQL($"Server=\"ntt-cad-mysql-d.mysql.database.azure.com\"; port=\"3306\" UserID = \"cad_db_adm\";Password=\"{{your_password}}\";Database=\"{{your_database}}\";SslMode=Required;SslCa=\"{{path_to_CA_cert}}\"");
         protected override void OnConfiguring(DbContextOptionsBuilder options)
 
         public ArkDataContext(DbContextOptions<ArkDataContext> options) : base(options) { }
