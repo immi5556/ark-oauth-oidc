@@ -22,7 +22,7 @@ namespace Ark.oAuth.Oidc.Web.Controllers
             return View();
         }
 
-        public IActionResult Privacy()
+        public IActionResult User()
         {
             return View();
         }
