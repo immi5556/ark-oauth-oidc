@@ -22,7 +22,8 @@ namespace Ark.oAuth.Oidc
         public string tenant_id { get; set; }
         [ForeignKey("tenant_id")]
         public virtual ArkTenant tenant { get; set; }
-        [Column(TypeName = "jsonb")]
+        //[Column(TypeName = "jsonb")]
+        [NotMapped]
         public List<ArkApp> apps { get; set; } // server side: list of redirect_uri allowed
         public int seq { get; set; }
         public string authorize_endpoint { get; set; } //client & server config
@@ -94,8 +95,8 @@ namespace Ark.oAuth.Oidc
         public string access_token { get; set; }
         public string client_id { get; set; }
         [Column(TypeName = "jsonb")]
-        public List<UserPlant> plants { get; set; }
-        [Column(TypeName = "jsonb")]
+        //public List<UserPlant> plants { get; set; }
+        //[Column(TypeName = "jsonb")]
         public List<ArkScope> scopes { get; set; }
         [Column(TypeName = "jsonb")]
         public List<ArkClaim> claims { get; set; }
@@ -117,12 +118,6 @@ namespace Ark.oAuth.Oidc
         [ForeignKey("claim_id")]
         public virtual ArkClaim claims { get; set; }
     }
-    public class UserPlant
-    {
-        public string email { get; set; }
-        public string plant { get; set; }
-        public bool is_default { get; set; }
-    }
     public class User
     {
         string _email;
@@ -130,12 +125,13 @@ namespace Ark.oAuth.Oidc
         public string email { get { return (_email ?? "").ToLower(); } set { _email = (value ?? "").ToLower(); } }
         public string password { get; set; }
         public string full_name { get; set; }
-        [Column(TypeName = "jsonb")]
-        public List<UserPlant> plants { get; set; }
-        [Column(TypeName = "jsonb")]
-        public List<UserClient> clients { get; set; }
-        [Column(TypeName = "jsonb")]
-        public List<string> projects { get; set; }
+        //[Column(TypeName = "jsonb")]
+        //public List<UserPlant> plants { get; set; }
+        //[Column(TypeName = "jsonb")]
+        //[NotMapped]
+        //public List<UserClient> clients { get; set; }
+        //[Column(TypeName = "jsonb")]
+        //public List<string> projects { get; set; }
         [Column(TypeName = "jsonb")]
         public List<ArkScope> scopes { get; set; }
         [Column(TypeName = "jsonb")]
@@ -155,16 +151,16 @@ namespace Ark.oAuth.Oidc
         string _active_role;
         public string active_role { get { return (_active_role ?? "").ToLower(); } set { _active_role = value; } }
     }
-    public class UserClient
-    {
-        string _email;
-        public string email { get { return (_email ?? "").ToLower(); } set { _email = (value ?? "").ToLower(); } }
-        string _client_id;
-        public string client_id { get => (_client_id ?? "").ToLower(); set => _client_id = (value ?? "").ToLower(); }
-        string _role;
-        public string role { get => (_role ?? "").ToLower(); set => _role = (value ?? "").ToLower(); }
-        public bool is_default { get; set; }
-    }
+    //public class UserClient
+    //{
+    //    string _email;
+    //    public string email { get { return (_email ?? "").ToLower(); } set { _email = (value ?? "").ToLower(); } }
+    //    string _client_id;
+    //    public string client_id { get => (_client_id ?? "").ToLower(); set => _client_id = (value ?? "").ToLower(); }
+    //    string _role;
+    //    public string role { get => (_role ?? "").ToLower(); set => _role = (value ?? "").ToLower(); }
+    //    public bool is_default { get; set; }
+    //}
     public class UserRequest
     {
         string _email;
@@ -176,12 +172,12 @@ namespace Ark.oAuth.Oidc
         public string approver_message { get; set; }
         public string validation_id { get; set; }
         public string status { get; set; } //Initiated, ReInitiated, Verified, PwdGenerated, Approved/Rejected 
-        [Column(TypeName = "jsonb")]
-        public List<UserPlant> plants { get; set; }
-        [Column(TypeName = "jsonb")]
-        public List<UserClient> clients { get; set; }
-        [Column(TypeName = "jsonb")]
-        public List<string> projects { get; set; }
+        //[Column(TypeName = "jsonb")]
+        //public List<UserPlant> plants { get; set; }
+        //[Column(TypeName = "jsonb")]
+        //public List<UserClient> clients { get; set; }
+        //[Column(TypeName = "jsonb")]
+        //public List<string> projects { get; set; }
         [Column(TypeName = "jsonb")]
         public List<ArkScope> scopes { get; set; }
         [Column(TypeName = "jsonb")]

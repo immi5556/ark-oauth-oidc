@@ -1,20 +1,24 @@
 ﻿using Ark.oAuth.Oidc.Web.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
 
 namespace Ark.oAuth.Oidc.Web.Controllers
 {
     public class HomeController : Controller
     {
-        private readonly ILogger<HomeController> _logger;
+        ArkDataContext _ctx;
 
-        public HomeController(ILogger<HomeController> logger)
+        public HomeController(ArkDataContext ctx)
         {
-            _logger = logger;
+            _ctx = ctx;
         }
 
         public IActionResult Index()
         {
+            //ViewBag.claims = _ctx.oidc_claims.ToList();
+            var ss = _ctx.Database.GenerateCreateScript();
+            Console.WriteLine(ss);
             return View();
         }
 

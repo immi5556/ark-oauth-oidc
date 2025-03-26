@@ -53,10 +53,10 @@ namespace Ark.oAuth.Oidc
         }
         ArkDataContext GetCtx()
         {
-            if (!_setting.is_server) throw new ApplicationException($"invalid_data_access_to_server_token_service");
-            if (string.IsNullOrEmpty(_setting.oidc_server.connection_string)) throw new ApplicationException($"invalid_config_connection_string");
+            //if (!_setting.is_server) throw new ApplicationException($"invalid_data_access_to_server_token_service");
+            //if (string.IsNullOrEmpty(_setting.oidc_server.connection_string)) throw new ApplicationException($"invalid_config_connection_string");
             var optbld = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ArkDataContext>();
-            optbld.UseNpgsql(_setting.oidc_server.connection_string);
+            //optbld.UseNpgsql(_setting.oidc_server.connection_string);
             ArkDataContext ctx = new ArkDataContext(optbld.Options);
             ctx.ChangeTracker.AutoDetectChangesEnabled = false;
             ctx.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
@@ -84,11 +84,12 @@ namespace Ark.oAuth.Oidc
         }
         ArkApp GetClient(ArkProject proj, string client_id)
         {
-            client_id = (client_id ?? "").ToLower();
-            if (proj.micro_services == null || proj.micro_services.Count == 0) throw new ApplicationException($"app association error in project: {proj.project_id}");
-            var app = proj.micro_services.Find(t => t.client_id == client_id);
-            if (app == null) throw new ApplicationException("invalid_app_assocation_client_id");
-            return app;
+            //client_id = (client_id ?? "").ToLower();
+            //if (proj.micro_services == null || proj.micro_services.Count == 0) throw new ApplicationException($"app association error in project: {proj.project_id}");
+            //var app = proj.micro_services.Find(t => t.client_id == client_id);
+            //if (app == null) throw new ApplicationException("invalid_app_assocation_client_id");
+            //return app;
+            return null;
         }
         ArkProject ValidateClient(PkceCodeFlow flow, ArkProject proj)
         {
@@ -123,14 +124,15 @@ namespace Ark.oAuth.Oidc
             var client = proj.apps.Find(t => t.client_id == flow.client_id);
             if (client == null) throw new ApplicationException("invalid_key_client_missing");
             client.expiration_mins = client.expiration_mins <= 0 ? 30 : client.expiration_mins;
-            flow.id_token = BuildToken(flow, proj.issuer, client.expiration_mins, proj.rsa_private_key, user.GetIdClaims());
-            flow.access_token = BuildToken(flow, proj.issuer, client.expiration_mins, proj.rsa_private_key, user.GetAccessClaims());
+            //flow.id_token = BuildToken(flow, proj.issuer, client.expiration_mins, proj.rsa_private_key, user.GetIdClaims());
+            //flow.access_token = BuildToken(flow, proj.issuer, client.expiration_mins, proj.rsa_private_key, user.GetAccessClaims());
             flow.refresh_token = flow.code;
         }
         string BuildToken(PkceCodeFlow flow, string issuer, int exiration_mins,
             string rsa_key, Claim[] claims)
         {
-            var privateKey = rsa_key.ToByteArray();
+            //var privateKey = rsa_key.ToByteArray();
+            var privateKey = new byte[] { };
             using RSA rsa = RSA.Create();
             rsa.ImportPkcs8PrivateKey(privateKey, out _);
             var signCreds = new SigningCredentials(new RsaSecurityKey(rsa), SecurityAlgorithms.RsaSha256)
@@ -160,7 +162,8 @@ namespace Ark.oAuth.Oidc
             {
                 var acc = ctx.service_accounts.Where(r => r.client_id == acct.client_id && r.client_secret == acct.client_secret).FirstOrDefault();
                 if (acc == null || string.IsNullOrEmpty(acc.account_id)) throw new ApplicationException("invalid client_id or secret provided.");
-                flow.access_token = BuildToken(flow, proj.issuer, acct.expiration_mins <= 0 ? 30 : acct.expiration_mins, proj.rsa_private_key, acct.GetAccessClaims());
+                //flow.access_token = BuildToken(flow, proj.issuer, acct.expiration_mins <= 0 ? 30 : acct.expiration_mins, proj.rsa_private_key,  acct.GetAccessClaims());
+                flow.access_token = BuildToken(flow, proj.issuer, acct.expiration_mins <= 0 ? 30 : acct.expiration_mins, proj.rsa_private_key, null);
                 flow.refresh_token = flow.code;
             }
         }
@@ -181,7 +184,7 @@ namespace Ark.oAuth.Oidc
                     new Claim(JwtRegisteredClaimNames.Iat, unixTimeSeconds.ToString(), ClaimValueTypes.Integer64),
                     new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                     new Claim(JwtRegisteredClaimNames.NameId, acct.account_id),
-                    new Claim("plants", Newtonsoft.Json.JsonConvert.SerializeObject(acct.plants)),
+                    //new Claim("plants", Newtonsoft.Json.JsonConvert.SerializeObject(acct.plants)),
                     new Claim("active_service", acct.client_id),
                     new Claim("active_project", acct.project_id)
                 },
@@ -382,7 +385,7 @@ namespace Ark.oAuth.Oidc
                 ctx.oidc_project.ToList().ForEach(t =>
                 {
                     using RSA rsa = RSA.Create();
-                    rsa.ImportSubjectPublicKeyInfo(t.rsa_public_key.ToByteArray(), out _);
+                    //rsa.ImportSubjectPublicKeyInfo(t.rsa_public_key.ToByteArray(), out _);
                     var rsakey = new RsaSecurityKey(rsa);
                     rsakey.KeyId = t.project_id;
                     var jwk = JsonWebKeyConverter.ConvertFromRSASecurityKey(rsakey);

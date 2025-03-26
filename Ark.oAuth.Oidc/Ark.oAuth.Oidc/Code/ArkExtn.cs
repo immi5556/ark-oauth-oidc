@@ -83,6 +83,8 @@ namespace Ark.oAuth.Oidc.Code
             var unpack = new EmbeddedResourceUnpacker();
             var task = unpack.UnpackFiles(environment);
             Task.WaitAll(task);
+
+            services.AddDbContext<ArkDataContext>();
         }
     }
 }
