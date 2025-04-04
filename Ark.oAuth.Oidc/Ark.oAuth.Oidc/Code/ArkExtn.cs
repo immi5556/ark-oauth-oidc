@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Configuration;
+using System.Reflection;
 
 namespace Ark.oAuth.Oidc.Code
 {
@@ -78,13 +79,22 @@ namespace Ark.oAuth.Oidc.Code
     }
     public static class ArkExtn
     {
-        public static void AddArkAuth(this IServiceCollection services, IWebHostEnvironment environment)
-        {
-            var unpack = new EmbeddedResourceUnpacker();
-            var task = unpack.UnpackFiles(environment);
-            Task.WaitAll(task);
+        //public static void AddOidcServer(this IServiceCollection services, ArkConfig config)
+        //{
+        //    services.AddSingleton<Oidc.IUserService, Oidc.UserService>();
+        //    services.AddSingleton<Oidc.TokenServer>();
+        //    services.AddSingleton<ManageServer>();
+        //}
+        //public static void AddArkAuth(this IServiceCollection services, IWebHostEnvironment environment)
+        //{
+        //    var unpack = new EmbeddedResourceUnpacker();
+        //    var task = unpack.UnpackFiles(environment);
+        //    Task.WaitAll(task);
 
-            services.AddDbContext<ArkDataContext>();
-        }
+        //    services.AddDbContext<ArkDataContext>();
+        //    var config = LoadConfig(configuration);
+        //    services.AddSingleton(config);
+        //    services.AddOidcServer(config);
+        //}
     }
 }

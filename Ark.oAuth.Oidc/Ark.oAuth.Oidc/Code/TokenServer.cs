@@ -118,15 +118,15 @@ namespace Ark.oAuth.Oidc
         }
         public void BuildAsymmetricToken_IdToken(User user, PkceCodeFlow flow)
         {
-            var proj = GetProject(user.context.active_project);
-            if (string.IsNullOrEmpty(proj.rsa_private_key)) throw new ApplicationException("client_cert_missing.");
-            //TO DO: Immi -> comment this client logic validatio & move expiration to service accont level
-            var client = proj.apps.Find(t => t.client_id == flow.client_id);
-            if (client == null) throw new ApplicationException("invalid_key_client_missing");
-            client.expiration_mins = client.expiration_mins <= 0 ? 30 : client.expiration_mins;
-            //flow.id_token = BuildToken(flow, proj.issuer, client.expiration_mins, proj.rsa_private_key, user.GetIdClaims());
-            //flow.access_token = BuildToken(flow, proj.issuer, client.expiration_mins, proj.rsa_private_key, user.GetAccessClaims());
-            flow.refresh_token = flow.code;
+            //var proj = GetProject(user.context.active_project);
+            //if (string.IsNullOrEmpty(proj.rsa_private_key)) throw new ApplicationException("client_cert_missing.");
+            ////TO DO: Immi -> comment this client logic validatio & move expiration to service accont level
+            //var client = proj.apps.Find(t => t.client_id == flow.client_id);
+            //if (client == null) throw new ApplicationException("invalid_key_client_missing");
+            //client.expiration_mins = client.expiration_mins <= 0 ? 30 : client.expiration_mins;
+            ////flow.id_token = BuildToken(flow, proj.issuer, client.expiration_mins, proj.rsa_private_key, user.GetIdClaims());
+            ////flow.access_token = BuildToken(flow, proj.issuer, client.expiration_mins, proj.rsa_private_key, user.GetAccessClaims());
+            //flow.refresh_token = flow.code;
         }
         string BuildToken(PkceCodeFlow flow, string issuer, int exiration_mins,
             string rsa_key, Claim[] claims)
@@ -420,9 +420,9 @@ namespace Ark.oAuth.Oidc
                 var res = ctx.users.Find(user.email);
                 if (res == null) throw new ApplicationException("Invalid token sent.");
                 var user_scopes = (res.scopes ?? new List<ArkScope>()).Where(t => !string.IsNullOrEmpty(t.scope_id)).Select(t => t.scope_id.ToLower()).ToList();
-                var role_scopes = ctx.client_role_scopes.Where(tt => tt.role == user.context.active_role).Select(t => t).ToList();
-                var role_sids = role_scopes.SelectMany(t => t.scopes).Select(t => t.scope_id);
-                user_scopes.AddRange(role_sids);
+                //var role_scopes = ctx.client_role_scopes.Where(tt => tt.role == user.context.active_role).Select(t => t).ToList();
+                //var role_sids = role_scopes.SelectMany(t => t.scopes).Select(t => t.scope_id);
+                //user_scopes.AddRange(role_sids);
                 var scopes = ctx.oidc_scopes
                         .Where(t => !string.IsNullOrEmpty(t.scope_id) && user_scopes.Contains(t.scope_id.ToLower()))
                         //.Include(m => m.claims) // nested error

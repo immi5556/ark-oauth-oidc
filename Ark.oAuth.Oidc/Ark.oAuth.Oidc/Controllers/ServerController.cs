@@ -1,6 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 
-namespace Ark.oAuth.Oidc.Areas.Auth.Controllers
+namespace Ark.oAuth.Oidc.Controllers
 {
     [Area("auth")]
     [Route("auth/server")]
