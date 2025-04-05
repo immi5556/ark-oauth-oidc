@@ -1,7 +1,11 @@
-﻿using System.Configuration;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using System.ComponentModel.DataAnnotations;
+using System.Configuration;
 using System.Reflection;
 
-namespace Ark.oAuth.Oidc.Code
+namespace Ark.oAuth.Oidc
 {
     public class EmbeddedResourceUnpacker
     {
@@ -15,7 +19,7 @@ namespace Ark.oAuth.Oidc.Code
             // version and these files will be committed to source control etc, just like normal files
             if (!env.IsDevelopment()) return;
 
-            var foundationAssembly = typeof(Ark.oAuth.Oidc.Code.EmbeddedResourceUnpacker).GetTypeInfo().Assembly;
+            var foundationAssembly = typeof(Ark.oAuth.Oidc.EmbeddedResourceUnpacker).GetTypeInfo().Assembly;
             var assemblyName = foundationAssembly.GetName().Name;
 
             // Iterate over each embedded resource
@@ -79,22 +83,68 @@ namespace Ark.oAuth.Oidc.Code
     }
     public static class ArkExtn
     {
-        //public static void AddOidcServer(this IServiceCollection services, ArkConfig config)
-        //{
-        //    services.AddSingleton<Oidc.IUserService, Oidc.UserService>();
-        //    services.AddSingleton<Oidc.TokenServer>();
-        //    services.AddSingleton<ManageServer>();
-        //}
-        //public static void AddArkAuth(this IServiceCollection services, IWebHostEnvironment environment)
-        //{
-        //    var unpack = new EmbeddedResourceUnpacker();
-        //    var task = unpack.UnpackFiles(environment);
-        //    Task.WaitAll(task);
-
-        //    services.AddDbContext<ArkDataContext>();
-        //    var config = LoadConfig(configuration);
-        //    services.AddSingleton(config);
-        //    services.AddOidcServer(config);
-        //}
+        public static void UseArkAuthData(this IApplicationBuilder builder)
+        {
+            builder.Use(async (context, next) =>
+            {
+                using (var scope = builder.ApplicationServices.CreateScope())
+                {
+                    try
+                    {
+                        var dbContext = scope.ServiceProvider.GetRequiredService<ArkDataContext>();
+                        if (dbContext.Database.GetPendingMigrations().Any())
+                        {
+                            dbContext.Database.Migrate();
+                        }
+                        else if (!dbContext.Database.CanConnect())
+                        {
+                            dbContext.Database.EnsureCreated();
+                            var conf = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+                            var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+                            var htp = scope.ServiceProvider.GetService<IHttpContextAccessor>();
+                            dynamic dd = ArkUtil.GetKeys().Result;
+                            //1st time -> create client for server to manage users
+                            dbContext.clients.Add(new ArkClient()
+                            {
+                                client_id = ser.ClientId,
+                                name = ser.ClientId,
+                                display = $"{ser.ClientId} Admin Console",
+                                domain = $"{htp.HttpContext.Request.Host}",
+                                audience = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/ark/oauth/v1/aud",
+                                issuer = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/ark/oauth/v1/iss",
+                                expire_mins = 480,
+                                redirect_url = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/v1/client/callback",
+                                rsa_private = dd.private_key,
+                                rsa_public = dd.public_key,
+                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
+                            });
+                            dbContext.SaveChanges();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error
+                        throw new Exception("Database initialization failed", ex);
+                    }
+                }
+                await next();
+            });
+        }
+        //all server config is taken from database
+        public static void AddArkOidcServer(this IServiceCollection services, IWebHostEnvironment environment)
+        {
+            var unpack = new EmbeddedResourceUnpacker();
+            var task = unpack.UnpackFiles(environment);
+            Task.WaitAll(task);
+            services.AddDbContext<ArkDataContext>();
+            services.AddScoped<DataAccess>();
+            services.AddScoped<TokenServer>();
+            //services.AddSingleton<ManageServer>();
+        }
+    }
+    public static class ExtnUtil
+    {
+        public static byte[] ToByteArray(this string x) => Convert.FromBase64String(x);
+        public static string ToHex(this byte[] x) => BitConverter.ToString(x).Replace("-", "").ToLower();
     }
 }

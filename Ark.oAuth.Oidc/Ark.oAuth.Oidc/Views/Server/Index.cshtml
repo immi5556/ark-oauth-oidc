@@ -4,44 +4,55 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>ARK (oAuth) - Login</title>
+    <title>NTT (IdP) - Login</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="lib/jquery/jquery.min.js"></script>
+    <script src="lib/popper/popper.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" />
     <link rel="stylesheet" type="text/css" href="~/css/ark-oauth-login.css" />
 </head>
 <body>
-    <div id="container">
-        <div id="login-button">
-            <img src="https://dqcgrsy5v35b9.cloudfront.net/cruiseplanner/assets/img/icons/login-w-icon.png" />
-        </div>
+    <div class="container-fluid">
+        <form method="post" name="Login_Form" class="form-signin">
+            <div class="row" id="login">
+                <div class="col-xs-12 col-md-10 col-md-offset-1 col-lg-2 col-lg-offset-3 text-center" id="left">
+                    @* <img src="@ViewBag.ctx.base_url_static/base/img/nttdata_logo_.png" style="width:100%;margin-top: 10px;" /> *@
+                    <div class="client-logo"></div>
+                    <h2 style="color: white;">Identity Provider</h2>
+                    @* <img class="auth-icon" src="@ViewBag.ctx.base_url_static/base/libs/ntt-auth/ntt-auth.gif" width="150" style="" /> *@
+                    <div class="auth-icon"></div>
+                    <div>
+                        <a href="@ViewBag.client_url" target="_blank">Client Config</a>
+                    </div>
+                </div>
 
-        <img src="/img/ark_oauth_logo.png" /> <br />
+                <div class="col-xs-12 col-md-10 col-md-offset-1 col-lg-4 col-lg-offset-0" id="right">
+                    <h1 class="text-center">Log In</h1>
 
-        <h1>Log In</h1>
+                    <hr style="border-top: 3px double #8c8b8b;" />
+                    <div id="username">
+                        <span>Username:</span>
+                        <input type="text" data-cust="username" name="Username" placeholder="username" required="" />
+                    </div>
 
-        <form>
-            <input type="email" name="email" placeholder="E-mail">
-            <input type="password" name="pass" placeholder="Password">
-            <a href="#">Log in</a>
-            <div id="remember-container">
-                <input type="checkbox" id="checkbox-2-1" class="checkbox" checked="checked" />
-                <span id="remember">Remember me</span>
-                <span id="forgotten">Forgotten password</span>
+                    <div id="password">
+                        <span>Password:</span>
+                        <input type="password" data-cust="password" class="form-control" name="Password" placeholder="*********" required="" />
+                    </div>
+
+                    <button class="btn btn-lg btn-primary btn-block" data-cust="login" name="Submit" value="Login" type="Submit">Login</button>
+                    @if (ViewBag.IsError)
+                    {
+                        <div style="text-align:center;color: red; margin-top: 10px;">
+                            @ViewBag.msg
+                        </div>
+                    }
+                </div>
             </div>
         </form>
     </div>
-
-    <!-- Forgotten Password Container -->
-    <div id="forgotten-container">
-        <h1>Forgotten</h1>
-        <span class="close-btn">
-            <img src="https://cdn4.iconfinder.com/data/icons/miu/22/circle_close_delete_-128.png" />
-        </span>
-
-        <form>
-            <input type="email" name="email" placeholder="E-mail">
-            <a href="#" class="orange-btn">Get new password</a>
-        </form>
-    </div>
+    <script src="lib/ark-util/ark-util.js"></script>
+    <script src="lib/ntt-auth/ntt_auth.js"></script>
 </body>
 </html>

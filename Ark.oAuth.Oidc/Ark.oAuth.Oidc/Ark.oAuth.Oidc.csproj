@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
-		<TargetFramework>net6.0</TargetFramework>
+		<TargetFramework>net7.0</TargetFramework>
 		<Version>0.0.2.18</Version>
 		<Description>base oAuth oidc implementation</Description>
 		<ImplicitUsings>enable</ImplicitUsings>
@@ -14,7 +14,9 @@
 
 	<ItemGroup>
 	  <Content Remove="wwwroot\css\ark-oauth-login.css" />
+	  <Content Remove="wwwroot\img\ark-auth.gif" />
 	  <Content Remove="wwwroot\img\ark_idp.png" />
+	  <Content Remove="wwwroot\img\ark_logo_1.png" />
 	  <Content Remove="wwwroot\img\ark_oauth_logo.png" />
 	  <Content Remove="wwwroot\img\imm_c_dev_1.png" />
 	  <Content Remove="wwwroot\img\oauth-bg.jpg" />
@@ -22,8 +24,14 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <Page Include="wwwroot\img\ark_logo_1.png" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <EmbeddedResource Include="wwwroot\css\ark-oauth-login.css" />
+	  <EmbeddedResource Include="wwwroot\img\ark-auth.gif" />
 	  <EmbeddedResource Include="wwwroot\img\ark_idp.png" />
+	  <EmbeddedResource Include="wwwroot\img\ark_logo_1.png" />
 	  <EmbeddedResource Include="wwwroot\img\ark_oauth_logo.png" />
 	  <EmbeddedResource Include="wwwroot\img\imm_c_dev_1.png" />
 	  <EmbeddedResource Include="wwwroot\img\oauth-bg.jpg" />
@@ -32,6 +40,8 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Ark.EfCore" Version="0.0.1.1" />
-	  <PackageReference Include="MySql.EntityFrameworkCore" Version="7.0.16" />
+	  <!--<PackageReference Include="MySql.EntityFrameworkCore" Version="7.0.16" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="7.0.20" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="7.0.20" />-->
 	</ItemGroup>
 </Project>

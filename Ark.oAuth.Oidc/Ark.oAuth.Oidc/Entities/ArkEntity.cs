@@ -17,6 +17,7 @@ namespace Ark.oAuth
         public string rsa_private { get; set; }
         public string issuer { get; set; }
         public string audience { get; set; }
+        public int expire_mins { get; set; } = 480; // durations
         public string at { get; set; }
     }
     public class ArkUser
@@ -78,15 +79,11 @@ namespace Ark.oAuth
     {
         [Key]
         public string code { get; set; }
-        string _project_id;
-        public string project_id { get => (_project_id ?? "").ToLower(); set => _project_id = value; }
         string _client_id;
         public string client_id { get => (_client_id ?? "").ToLower(); set => _client_id = value; }
-        public string client_secret { get; set; }
+        public string? client_secret { get; set; }
         string _redirect_uri;
         public string redirect_uri { get => (_redirect_uri ?? "").ToLower(); set => _redirect_uri = value; }
-        string _scope;
-        public string scope { get => (_scope ?? "").ToLower(); set => _scope = value; }
         string _audience;
         public string audience { get => (_audience ?? "").ToLower(); set => _audience = value; }
         string _response_type;
@@ -94,11 +91,12 @@ namespace Ark.oAuth
         public string code_challenge { get; set; }
         string _code_challenge_method;
         public string code_challenge_method { get => (_code_challenge_method ?? "").ToLower(); set => _code_challenge_method = value; }
-        public string state { get; set; }
-        public string id_token { get; set; }
+        public string? state { get; set; }
         public bool inactivate { get; set; }
-        public string access_token { get; set; }
-        public string refresh_token { get; set; }
+        public string? access_token { get; set; }
+        public string? scopes { get; set; }
+        public string? claims { get; set; }
+        public string? refresh_token { get; set; }
         public DateTime expires_at { get; set; }
         public DateTime created_at { get; set; } = DateTime.UtcNow;
     }
