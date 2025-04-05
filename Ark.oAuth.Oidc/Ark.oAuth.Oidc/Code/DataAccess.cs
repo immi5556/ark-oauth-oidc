@@ -1,0 +1,50 @@
+﻿using Microsoft.EntityFrameworkCore;
+
+namespace Ark.oAuth.Oidc
+{
+    public class DataAccess
+    {
+        ArkDataContext _ctx;
+        public DataAccess(ArkDataContext ctx)
+        {
+            _ctx = ctx;
+        }
+        public async Task<ArkClient> GetClient(string client_id)
+        {
+            return _ctx.clients.FirstOrDefault(t => t.client_id.ToLower().Trim() == (client_id ?? "").ToLower().Trim());
+        }
+        public async Task<PkceCodeFlow> GetPkceCode(string code)
+        {
+            return _ctx.pkce_code_flow.FirstOrDefault(t => t.code == code);
+        }
+        public async Task UpsertPkceCode(string token, ArkClient client, string code, string code_challenge, string code_challenge_method, string state, string scopes, string claims, DateTime expires_at, string redirect_uri, string response_type)
+        {
+            _ctx.pkce_code_flow.Add(new PkceCodeFlow()
+            {
+                access_token = token,
+                audience = client.audience,
+                client_id = client.client_id,
+                code = code,
+                code_challenge = code_challenge,
+                code_challenge_method = code_challenge_method,
+                state = state,
+                refresh_token = code_challenge,
+                scopes = scopes,
+                claims = claims,
+                expires_at = expires_at,
+                created_at = DateTime.UtcNow,
+                redirect_uri = redirect_uri,
+                response_type = response_type
+            });
+            await _ctx.SaveChangesAsync();
+        }
+        public async Task ExecuteRaw(string sql)
+        {
+            _ctx.Database.ExecuteSqlRaw(sql);
+        }
+        public async Task EnsureCreatedAsync()
+        {
+            await _ctx.Database.EnsureCreatedAsync();
+        }
+    }
+}
