@@ -63,7 +63,7 @@ namespace Ark.oAuth.Oidc.Controllers
             catch (Exception ex)
             {
                 ViewBag.IsError = true;
-                ViewBag.msg = ex.Message;
+                ViewBag.msg = ex.ToString();
             }
             return View();
         }

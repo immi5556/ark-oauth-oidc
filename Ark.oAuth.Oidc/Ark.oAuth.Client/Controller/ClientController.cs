@@ -22,7 +22,7 @@ namespace Ark.oAuth.Client
             CookieOptions option = new CookieOptions();
             option.Expires = DateTime.Now.AddDays(cc.ExpireMins).ToLocalTime();
             option.Secure = true;
-            //option.HttpOnly = true;
+            option.HttpOnly = true;
             option.SameSite = SameSiteMode.None;
             option.Domain = cc.Domain;
             Response.Cookies.Append($"ark_oauth_tkn", token, option);

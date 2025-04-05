@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
@@ -111,15 +112,15 @@ namespace Ark.oAuth
                     },
                     OnChallenge = ctx =>
                     {
-                        if (ctx.AuthenticateFailure != null || ctx.Error != null || ctx.ErrorUri != null)
-                        {
-                            //its no tken, so inititate auth process
-                            ctx.HandleResponse();
-                            var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
-                            var code_challenge = PkceHelper.GenerateCodeChallenge($"JESUSmyLORD_{ark.net.util.DateUtil.CurrentTimeStamp()}");
-                            var ff = $"{jwt.AuthServerUrl}/connect/authorize?response_type=code&client_id={jwt.ClientId}&redirect_uri={jwt.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
-                            ctx.Response.Redirect($"{ff}");
-                        }
+                        //if (ctx.AuthenticateFailure != null || ctx.Error != null || ctx.ErrorUri != null)
+                        //{
+                        //its no tken, so inititate auth process
+                        ctx.HandleResponse();
+                        var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
+                        var code_challenge = PkceHelper.GenerateCodeChallenge($"JESUSmyLORD_{ark.net.util.DateUtil.CurrentTimeStamp()}");
+                        var ff = $"{jwt.AuthServerUrl}/connect/authorize?response_type=code&client_id={jwt.ClientId}&redirect_uri={jwt.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
+                        ctx.Response.Redirect($"{ff}");
+                        //}
                         return Task.CompletedTask;
                     },
                     OnMessageReceived = msg =>
@@ -139,6 +140,11 @@ namespace Ark.oAuth
             {
                 if (context.Request.Query.ContainsKey("err") && !string.IsNullOrEmpty(context.Request.Query["err"]) && (context.Request.Query["err"] == "access_denied" || context.Request.Query["err"] == "invalid_token"))
                 {
+                    CookieOptions option = new CookieOptions();
+                    option.Expires = DateTime.Now.AddDays(-1);
+                    option.Secure = true;
+                    option.IsEssential = true;
+                    context.Response.Cookies.Append("ark_oauth_tkn", string.Empty, option);
                     context.Response.Cookies.Delete("ark_oauth_tkn");
                 }
                 var token = context.Request.Cookies[$"ark_oauth_tkn"];

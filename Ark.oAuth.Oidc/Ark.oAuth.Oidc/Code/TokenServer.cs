@@ -25,7 +25,15 @@ namespace Ark.oAuth.Oidc
         (string, DateTime) BuildToken(ArkClient client, int exiration_mins, Claim[] claims)
         {
             var privateKey = client.rsa_private.ToByteArray();
-            using RSA rsa = RSA.Create();
+            //uncomment for ubuntu releases
+            //using RSA rsa = RSA.Create();
+            //comment below for ubuntu
+            #region WindowsSupport
+            CspParameters cspParams = new CspParameters();
+            cspParams.KeyContainerName = Guid.NewGuid().ToString().ToUpperInvariant();
+            cspParams.Flags = CspProviderFlags.UseMachineKeyStore;
+            RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(cspParams);
+            #endregion
             rsa.ImportPkcs8PrivateKey(privateKey, out _);
             //var signCreds = new SigningCredentials(new RsaSecurityKey(rsa) { KeyId = client.client_id }, SecurityAlgorithms.RsaSha256)
             //{

@@ -18,3 +18,5 @@ https://developer.okta.com/docs/reference/api/oidc/#endpoints
 https://rsa-key-gen.immanuel.co/
 
 https://rsa-key-gen.immanuel.co/api/keys
+
+https://ark-oidc-server.immanuel.co/auth/oauth/v1/.well-known/ark_server/openid-configuration
