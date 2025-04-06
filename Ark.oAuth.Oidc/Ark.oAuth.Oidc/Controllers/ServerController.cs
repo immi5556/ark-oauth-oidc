@@ -18,28 +18,33 @@ namespace Ark.oAuth.Oidc.Controllers
             _da = da;
             _config = config;
         }
-        [Route("signin-oidc/{client_id}/claims")]
-        public async Task<dynamic> GetClaimsByCode([FromRoute] string client_id, [FromQuery] string code)
+        [Route("{tenant_id}/v1/signin-oidc/claims/{client_id}")]
+        public async Task<dynamic> GetClaimsByCode([FromRoute] string tenant_id, [FromRoute] string client_id, [FromQuery] string code)
         {
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             ViewBag.IsError = false;
-            client_id = string.IsNullOrEmpty(client_id) ? ser.ClientId : client_id;
-            var cc = await _da.GetClient(client_id);
-            ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/v1/.well-known/{client_id}/openid-configuration";
+            tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
+            var tnt = await _da.GetTenant(tenant_id);
+            client_id = string.IsNullOrEmpty(client_id) ? throw new ApplicationException("client_id_empty") : client_id;
+            ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/v1/.well-known/{tenant_id}/openid-configuration";
             return View();
         }
-        [Route("connect/authorize")]
-        public IActionResult Index([FromQuery] string client_id)
+        [Route("{tenant_id}/v1/connect/authorize")]
+        public async Task<IActionResult> Index([FromRoute] string tenant_id, [FromQuery] string client_id)
         {
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             ViewBag.IsError = false;
-            client_id = string.IsNullOrEmpty(client_id) ? ser.ClientId : client_id;
+            tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
+            var tnt = await _da.GetTenant(tenant_id);
+            client_id = string.IsNullOrEmpty(client_id) ? throw new ApplicationException("client_id_empty") : client_id;
             ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/v1/.well-known/{client_id}/openid-configuration";
             return View();
         }
         [HttpPost]
-        [Route("connect/authorize")]
-        public async Task<IActionResult> Index([FromForm] string Username, [FromForm] string Password,
+        [Route("{tenant_id}/v1/connect/authorize")]
+        public async Task<IActionResult> Index([FromRoute] string tenant_id, 
+            [FromForm] string Username, 
+            [FromForm] string Password,
             [FromQuery] string response_type,
             [FromQuery] string client_id,
             [FromQuery] string redirect_uri,
@@ -53,11 +58,12 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/v1/.well-known/{client_id}/openid-configuration";
             try
             {
+                var tt = await _da.GetTenant(tenant_id);
+                if (tt == null) throw new ApplicationException("invalid_tenant");
                 var cc = await _da.GetClient(client_id);
-                if (cc == null) throw new ApplicationException("invalid_client");
                 if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_redirect_uri");
-                var tkn = await _ts.BuildAsymmetric_AccessToken(cc, code_challenge);
-                await _da.UpsertPkceCode(tkn.Item1, cc, code_challenge, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
+                var tkn = await _ts.BuildAsymmetric_AccessToken(tt, code_challenge);
+                await _da.UpsertPkceCode(tkn.Item1, tt, code_challenge, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
                 return Redirect($"{cc.redirect_url}?token={tkn.Item1}");
             }
             catch (Exception ex)
@@ -68,18 +74,21 @@ namespace Ark.oAuth.Oidc.Controllers
             return View();
         }
         [Authorize]
-        [Route("v1/server/manage")]
-        public IActionResult Manage()
+        [Route("{tenant_id}/v1/server/manage")]
+        public async Task<IActionResult> Manage([FromRoute] string tenant_id)
         {
+            var tt = await _da.GetTenant(tenant_id);
+            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             ViewBag.IsError = false;
             return View();
         }
 
-        [Route("v1/.well-known/{client_id}/openid-configuration")]
-        public async Task<dynamic> Wellknown([FromRoute] string client_id)
+        [Route("{tenant_id}/v1/.well-known/{client_id}/openid-configuration")]
+        public async Task<dynamic> Wellknown([FromRoute] string tenant_id, [FromRoute] string client_id)
         {
-            var cc = await _da.GetClient(client_id);
+            var tt = await _da.GetTenant(tenant_id);
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var cc = await _da.GetClient(client_id);
             return new
             {
                 code_challenge_methods_supported = new List<string>() { "S256" },
@@ -89,14 +98,16 @@ namespace Ark.oAuth.Oidc.Controllers
                 {
                     ark_oauth_client = new
                     {
-                        Issuer = cc.issuer,
-                        Audience = cc.audience,
-                        RsaPublic = cc.rsa_public,
+                        Issuer = tt.issuer,
+                        Audience = tt.audience,
+                        RsaPublic = tt.rsa_public,
                         RedirectUri = cc.redirect_url,
+                        RedirectRelative = "",
                         AuthServerUrl = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/oauth")}",
-                        ClientId = cc.client_id,
+                        ClientId = client_id,
+                        TenantId = tt.tenant_id,
                         Domain = cc.domain,
-                        ExpireMins = cc.expire_mins
+                        ExpireMins = tt.expire_mins
                     }
                 }
             };

@@ -5,6 +5,20 @@ using System.ComponentModel.DataAnnotations;
 namespace Ark.oAuth
 {
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    public class ArkTenant
+    {
+        [Key]
+        public string tenant_id { get; set; }
+        public string name { get; set; }
+        public string display { get; set; }
+        public string rsa_public { get; set; }
+        public string rsa_private { get; set; }
+        public string issuer { get; set; }
+        public string audience { get; set; }
+        public int expire_mins { get; set; } = 480; // durations
+        public string at { get; set; }
+    }
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     public class ArkClient
     {
         [Key]
@@ -13,10 +27,6 @@ namespace Ark.oAuth
         public string display { get; set; }
         public string domain { get; set; }
         public string redirect_url { get; set; }
-        public string rsa_public { get; set; }
-        public string rsa_private { get; set; }
-        public string issuer { get; set; }
-        public string audience { get; set; }
         public int expire_mins { get; set; } = 480; // durations
         public string at { get; set; }
     }

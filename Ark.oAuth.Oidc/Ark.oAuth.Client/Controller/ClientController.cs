@@ -15,7 +15,7 @@ namespace Ark.oAuth.Client
         {
             return _config.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? throw new ApplicationException("config missing");
         }
-        [Route("v1/client/callback")]
+        [Route("{tenant_id}/v1/client/callback")]
         public ActionResult Callback([FromQuery] string token)
         {
             var cc = LoadConfig();
@@ -31,7 +31,7 @@ namespace Ark.oAuth.Client
             //Response.Redirect($"{cc.RedirectRelative}");
         }
         [Authorize]
-        [Route("v1/client/config")]
+        [Route("{tenant_id}/v1/client/config")]
         public dynamic Config([FromQuery] string token)
         {
             var cc = LoadConfig();
