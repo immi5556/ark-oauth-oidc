@@ -20,7 +20,12 @@
 	  <Content Remove="wwwroot\img\ark_oauth_logo.png" />
 	  <Content Remove="wwwroot\img\imm_c_dev_1.png" />
 	  <Content Remove="wwwroot\img\oauth-bg.jpg" />
+	  <Content Remove="wwwroot\img\profile.png" />
 	  <Content Remove="wwwroot\img\security_1.jpg" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Include="wwwroot\img\profile.png" />
 	</ItemGroup>
 
 	<ItemGroup>

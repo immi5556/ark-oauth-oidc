@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -140,14 +141,16 @@ namespace Ark.oAuth
         {
             builder.Use(async (context, next) =>
             {
-                if (context.Request.Query.ContainsKey("err") && !string.IsNullOrEmpty(context.Request.Query["err"]) && (context.Request.Query["err"] == "access_denied" || context.Request.Query["err"] == "invalid_token"))
+                var config = builder.ApplicationServices.GetRequiredService<IConfiguration>();
+                var conf = config.GetSection("ark_oauth_client").Get<ArkAuthConfig>();
+                if (context.Request.Query.ContainsKey("err") && !string.IsNullOrEmpty(context.Request.Query["err"]) && (context.Request.Query["err"] == "access_denied" || context.Request.Query["err"] == "invalid_token" || context.Request.Query["err"] == "token_error"))
                 {
                     foreach (var cookie in context.Request.Cookies.Keys)
                     {
                         context.Response.Cookies.Delete(cookie, new CookieOptions()
                         {
                             Secure = true,
-                            Domain = "ark-oidc-server.immanuel.co"
+                            Domain = conf.Domain
                         });
                     }
                     //CookieOptions option = new CookieOptions();
@@ -158,7 +161,9 @@ namespace Ark.oAuth
                     //context.Response.Cookies.Delete("ark_oauth_tkn");
                 }
                 var token = context.Request.Cookies[$"ark_oauth_tkn"];
-                if (!string.IsNullOrEmpty(token))
+                var endpoint = context.GetEndpoint();
+                var authorizeData = endpoint?.Metadata.GetOrderedMetadata<IAuthorizeData>();
+                if (!string.IsNullOrEmpty(token) && authorizeData?.Any() == true)
                 {
                     context.Request.Headers.Add("Authorization", "Bearer " + token);
                 }
