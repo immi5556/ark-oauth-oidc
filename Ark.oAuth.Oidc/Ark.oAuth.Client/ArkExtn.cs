@@ -2,8 +2,10 @@
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using Org.BouncyCastle.Asn1.Ocsp;
 using System.Security.Cryptography;
 using System.Text;
+using static Org.BouncyCastle.Math.EC.ECCurve;
 
 namespace Ark.oAuth
 {
@@ -140,12 +142,20 @@ namespace Ark.oAuth
             {
                 if (context.Request.Query.ContainsKey("err") && !string.IsNullOrEmpty(context.Request.Query["err"]) && (context.Request.Query["err"] == "access_denied" || context.Request.Query["err"] == "invalid_token"))
                 {
-                    CookieOptions option = new CookieOptions();
-                    option.Expires = DateTime.Now.AddDays(-1);
-                    option.Secure = true;
-                    option.IsEssential = true;
-                    context.Response.Cookies.Append("ark_oauth_tkn", string.Empty, option);
-                    context.Response.Cookies.Delete("ark_oauth_tkn");
+                    foreach (var cookie in context.Request.Cookies.Keys)
+                    {
+                        context.Response.Cookies.Delete(cookie, new CookieOptions()
+                        {
+                            Secure = true,
+                            Domain = "ark-oidc-server.immanuel.co"
+                        });
+                    }
+                    //CookieOptions option = new CookieOptions();
+                    //option.Expires = DateTime.Now.AddDays(-1);
+                    //option.Secure = true;
+                    //option.IsEssential = true;
+                    //context.Response.Cookies.Append("ark_oauth_tkn", string.Empty, option);
+                    //context.Response.Cookies.Delete("ark_oauth_tkn");
                 }
                 var token = context.Request.Cookies[$"ark_oauth_tkn"];
                 if (!string.IsNullOrEmpty(token))
