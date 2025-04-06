@@ -5,6 +5,7 @@ namespace Ark.oAuth.Oidc
     public class ArkDataContext : DbContext
     {
         public virtual DbSet<ArkServiceAccount> service_accounts { get; set; }
+        public virtual DbSet<ArkTenant> tenants { get; set; }
         public virtual DbSet<ArkClient> clients { get; set; }
         public virtual DbSet<ArkUser> users { get; set; }
         public virtual DbSet<PkceCodeFlow> pkce_code_flow { get; set; }

@@ -17,14 +17,14 @@ namespace Ark.oAuth.Oidc
             _configuration = configuration;
             _da = da;
         }
-        public async System.Threading.Tasks.Task<(string, DateTime)> BuildAsymmetric_AccessToken(ArkClient client, string code)
+        public async System.Threading.Tasks.Task<(string, DateTime)> BuildAsymmetric_AccessToken(ArkTenant tenant, string code)
         {
-            if (string.IsNullOrEmpty(client.rsa_private)) throw new ApplicationException("client_cert_missing.");
-            return BuildToken(client, 300, new Claim[] { new Claim("code", code) });
+            if (string.IsNullOrEmpty(tenant.rsa_private)) throw new ApplicationException("tenant_cert_missing.");
+            return BuildToken(tenant, 300, new Claim[] { new Claim("code", code) });
         }
-        (string, DateTime) BuildToken(ArkClient client, int exiration_mins, Claim[] claims)
+        (string, DateTime) BuildToken(ArkTenant tenant, int exiration_mins, Claim[] claims)
         {
-            var privateKey = client.rsa_private.ToByteArray();
+            var privateKey = tenant.rsa_private.ToByteArray();
             //uncomment for ubuntu releases
             //using RSA rsa = RSA.Create();
             //comment below for ubuntu
@@ -47,8 +47,8 @@ namespace Ark.oAuth.Oidc
             var exp_at = now.AddMinutes(exiration_mins);
             var unixTimeSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
             var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(
-                audience: client.audience,
-                issuer: client.issuer,
+                audience: tenant.audience,
+                issuer: tenant.issuer,
                 claims: claims,
                 notBefore: now,
                 expires: exp_at,

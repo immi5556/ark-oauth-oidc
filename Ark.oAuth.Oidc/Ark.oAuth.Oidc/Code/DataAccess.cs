@@ -9,6 +9,10 @@ namespace Ark.oAuth.Oidc
         {
             _ctx = ctx;
         }
+        public async Task<ArkTenant> GetTenant(string tenant_id)
+        {
+            return _ctx.tenants.FirstOrDefault(t => t.tenant_id.ToLower().Trim() == (tenant_id ?? "").ToLower().Trim());
+        }
         public async Task<ArkClient> GetClient(string client_id)
         {
             return _ctx.clients.FirstOrDefault(t => t.client_id.ToLower().Trim() == (client_id ?? "").ToLower().Trim());
@@ -17,13 +21,13 @@ namespace Ark.oAuth.Oidc
         {
             return _ctx.pkce_code_flow.FirstOrDefault(t => t.code == code);
         }
-        public async Task UpsertPkceCode(string token, ArkClient client, string code, string code_challenge, string code_challenge_method, string state, string scopes, string claims, DateTime expires_at, string redirect_uri, string response_type)
+        public async Task UpsertPkceCode(string token, ArkTenant tenant, string code, string code_challenge, string code_challenge_method, string state, string scopes, string claims, DateTime expires_at, string redirect_uri, string response_type)
         {
             _ctx.pkce_code_flow.Add(new PkceCodeFlow()
             {
                 access_token = token,
-                audience = client.audience,
-                client_id = client.client_id,
+                audience = tenant.audience,
+                client_id = tenant.tenant_id,
                 code = code,
                 code_challenge = code_challenge,
                 code_challenge_method = code_challenge_method,

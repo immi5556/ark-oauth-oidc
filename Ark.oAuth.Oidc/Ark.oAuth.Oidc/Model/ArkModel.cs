@@ -42,7 +42,7 @@
     }
     public class ArkAuthServerConfig
     {
-        public string ClientId { get; set; }
+        public string TenantId { get; set; }
         public string BasePath { get; set; }
     }
     public class ArkAuthContext

@@ -19,6 +19,7 @@ namespace Ark.oAuth
         public string RedirectRelative { get; set; }
         public string AuthServerUrl { get; set; }
         public string ClientId { get; set; }
+        public string TenantId { get; set; }
         public string Domain { get; set; }
         public int ExpireMins { get; set; } = 480;
     }
@@ -44,20 +45,20 @@ namespace Ark.oAuth
                 options.SaveToken = true;
                 // Enable detailed logging in your token validation
                 options.IncludeErrorDetails = true;
-                var jwt = LoadConfig(configuration);
+                var client_config = LoadConfig(configuration);
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidIssuer = jwt.Issuer,
+                    ValidIssuer = client_config.Issuer,
                     ValidateAudience = true,
-                    ValidAudience = jwt.Audience,
+                    ValidAudience = client_config.Audience,
                     ValidateLifetime = true,
                     IssuerSigningKeyResolver = (string token, SecurityToken securityToken, string kid, TokenValidationParameters validationParameters) =>
                     {
                         List<SecurityKey> keys = new List<SecurityKey>();
                         //if (!config.app_list.ContainsKey(kid)) throw new SecurityTokenInvalidSignatureException("Unable to validate signature, invalid token with 'kid' value.");
                         //var app = config.app_list[kid];
-                        var pub_conf_key = jwt.RsaPublic;
+                        var pub_conf_key = client_config.RsaPublic;
                         var publicKey = Convert.FromBase64String(pub_conf_key);
                         RSA rsa = RSA.Create();
                         rsa.ImportSubjectPublicKeyInfo(publicKey, out _);
@@ -98,7 +99,7 @@ namespace Ark.oAuth
                         //&code_challenge_method=S256
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
                         var code_challenge = ctx.Request.Query.ContainsKey("code_challenge") ? ctx.Request.Query["code_challenge"][0] : "";
-                        var ff = $"{jwt.AuthServerUrl}/connect/authorize?response_type=code&client_id={jwt.ClientId}&redirect_uri={jwt.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
+                        var ff = $"{client_config.AuthServerUrl}/{client_config.TenantId}/v1/connect/authorize?response_type=code&client_id={client_config.ClientId}&redirect_uri={client_config.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
                         ctx.Response.Redirect($"{ff}");
                         return Task.CompletedTask;
                     },
@@ -121,7 +122,7 @@ namespace Ark.oAuth
                         ctx.HandleResponse();
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
                         var code_challenge = PkceHelper.GenerateCodeChallenge($"JESUSmyLORD_{ark.net.util.DateUtil.CurrentTimeStamp()}");
-                        var ff = $"{jwt.AuthServerUrl}/connect/authorize?response_type=code&client_id={jwt.ClientId}&redirect_uri={jwt.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
+                        var ff = $"{client_config.AuthServerUrl}/{client_config.TenantId}/v1/connect/authorize?response_type=code&client_id={client_config.ClientId}&redirect_uri={client_config.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
                         ctx.Response.Redirect($"{ff}");
                         //}
                         return Task.CompletedTask;
