@@ -77,8 +77,10 @@ namespace Ark.oAuth.Oidc.Controllers
         [Route("{tenant_id}/v1/server/manage")]
         public async Task<IActionResult> Manage([FromRoute] string tenant_id)
         {
+            //allowed only for server app (app_server)
             var tt = await _da.GetTenant(tenant_id);
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            ViewBag.tenant = tt;
             ViewBag.IsError = false;
             return View();
         }

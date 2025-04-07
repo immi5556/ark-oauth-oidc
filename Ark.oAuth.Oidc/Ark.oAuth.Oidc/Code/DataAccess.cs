@@ -13,6 +13,10 @@ namespace Ark.oAuth.Oidc
         {
             return _ctx.tenants.FirstOrDefault(t => t.tenant_id.ToLower().Trim() == (tenant_id ?? "").ToLower().Trim());
         }
+        public async Task<List<ArkTenant>> GetTenants()
+        {
+            return _ctx.tenants.ToList();
+        }
         public async Task<ArkClient> GetClient(string client_id)
         {
             return _ctx.clients.FirstOrDefault(t => t.client_id.ToLower().Trim() == (client_id ?? "").ToLower().Trim());

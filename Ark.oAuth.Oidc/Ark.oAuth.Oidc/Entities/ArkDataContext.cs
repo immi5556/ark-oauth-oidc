@@ -20,7 +20,11 @@ namespace Ark.oAuth.Oidc
                 .HasIndex(prop => prop.account_id);
         }
         protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseSqlite(_config.GetConnectionString("ArkAuthConnection"));
+        {
+
+        }
+        //=> options.UseSqlite(_config.GetConnectionString("ArkAuthConnection"));
+        //=> options.UseMySQL(_config.GetConnectionString("ArkAuthConnection"));
 
         public ArkDataContext(DbContextOptions<ArkDataContext> options, IConfiguration config) : base(options)
         {
