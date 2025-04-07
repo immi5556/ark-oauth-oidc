@@ -9,7 +9,7 @@ namespace Ark.oAuth.Oidc
     [ApiController]
     public class ManageController : ControllerBase
     {
-        [Route("{tenant_id}/v1/tenant/list")]
+        [Route("v1/tenant/list")]
         public async Task<dynamic> TenantList([FromServices] DataAccess da)
         {
             return new
@@ -19,15 +19,16 @@ namespace Ark.oAuth.Oidc
                 data = await da.GetTenants() 
             };
         }
-        //[Route("{tenant_id}/v1/tenant/list")]
-        //public async Task<dynamic> TenantList([FromServices] DataAccess da)
-        //{
-        //    return new
-        //    {
-        //        error = false,
-        //        msg = "tenatns list loaded.",
-        //        data = await da.GetTenants()
-        //    };
-        //}
+        [HttpPost]
+        [Route("v1/tenant/upsert")]
+        public async Task<dynamic> TenantUpdate([FromServices] DataAccess da, [FromBody] ArkTenant tenant)
+        {
+            return new
+            {
+                error = false,
+                msg = "tenatns list loaded.",
+                data = await da.GetTenants()
+            };
+        }
     }
 }
