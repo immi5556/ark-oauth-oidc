@@ -21,7 +21,13 @@ namespace Ark.oAuth.Oidc
         }
         protected override void OnConfiguring(DbContextOptionsBuilder options)
         {
-
+            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            if (string.IsNullOrEmpty(ser.Provider) || ser.Provider.ToLower() == "sqlite")
+                options.UseSqlite(_config.GetConnectionString("ArkAuthConnection"));
+            else if (ser.Provider.ToLower() == "mysql")
+                options.UseMySQL(_config.GetConnectionString("ArkAuthConnection"));
+            else if (ser.Provider.ToLower() == "postgres")
+                options.UseNpgsql(_config.GetConnectionString("ArkAuthConnection"));
         }
         //=> options.UseSqlite(_config.GetConnectionString("ArkAuthConnection"));
         //=> options.UseMySQL(_config.GetConnectionString("ArkAuthConnection"));
