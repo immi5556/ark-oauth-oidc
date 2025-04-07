@@ -44,6 +44,7 @@
     {
         public string TenantId { get; set; }
         public string BasePath { get; set; }
+        public string Provider { get; set; }
     }
     public class ArkAuthContext
     {

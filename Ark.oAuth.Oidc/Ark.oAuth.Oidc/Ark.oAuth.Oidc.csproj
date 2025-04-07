@@ -45,6 +45,8 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Ark.EfCore" Version="0.0.1.1" />
+	  <PackageReference Include="BouncyCastle.Cryptography" Version="2.5.1" />
+	  <PackageReference Include="Microsoft.Data.SqlClient" Version="3.1.5" />
 	  <!--<PackageReference Include="MySql.EntityFrameworkCore" Version="7.0.16" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="7.0.20" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="7.0.20" />-->
