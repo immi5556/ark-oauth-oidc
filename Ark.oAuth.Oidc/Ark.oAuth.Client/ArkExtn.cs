@@ -27,7 +27,8 @@ namespace Ark.oAuth
     {
         static ArkAuthConfig LoadConfig(IConfiguration configuration)
         {
-            return configuration.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? throw new ApplicationException("config missing");
+            //return configuration.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? throw new ApplicationException("config missing");
+            return configuration.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? new ArkAuthConfig();
         }
         //All client config is taken from app settings
         public static void AddArkOidcClient(this IServiceCollection services, IConfiguration configuration)
