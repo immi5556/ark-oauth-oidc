@@ -46,21 +46,4 @@
         public string BasePath { get; set; }
         public string Provider { get; set; }
     }
-    public class ArkAuthContext
-    {
-        IHttpContextAccessor _http;
-        public ArkAuthContext(IHttpContextAccessor http)
-        {
-            _http = http;
-            ip = _http.HttpContext.Request.Cookies["ark_oauth_ip"] ?? "";
-            user_id = _http.HttpContext.Request.Cookies["ark_oauth_email"] ?? "";
-            var cid = (_http.HttpContext.Request.RouteValues["client_id"] ?? "").ToString().ToLower();
-            client_id = string.IsNullOrEmpty(cid)
-                ? (_http.HttpContext.Request.Query.ContainsKey("client_id") && _http.HttpContext.Request.Query["client_id"].Count > 0 ? (_http.HttpContext.Request.Query["client_id"][0] ?? "").ToString().ToLower() : "")
-                : cid;
-        }
-        public string client_id { get; private set; }
-        public string? user_id { get; private set; } //mob or email (opt 1: mob, opt 2: email)
-        public string? ip { get; set; }
-    }
 }
