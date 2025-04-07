@@ -15,6 +15,7 @@ namespace Ark.oAuth
         public string rsa_private { get; set; }
         public string issuer { get; set; }
         public string audience { get; set; }
+        public bool active { get; set; } = true;
         public int expire_mins { get; set; } = 480; // durations
         public string at { get; set; }
     }
