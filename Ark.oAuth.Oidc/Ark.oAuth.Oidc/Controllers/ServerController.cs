@@ -81,7 +81,9 @@ namespace Ark.oAuth.Oidc.Controllers
             var tt = await _da.GetTenant(tenant_id);
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             ViewBag.tenant = tt;
+            ViewBag.base_path = ser.BasePath;
             ViewBag.IsError = false;
+            //ViewBag.ctx = 
             return View();
         }
 
