@@ -106,7 +106,7 @@ namespace Ark.oAuth.Oidc.Controllers
                         Audience = tt.audience,
                         RsaPublic = tt.rsa_public,
                         RedirectUri = cc.redirect_url,
-                        RedirectRelative = "",
+                        RedirectRelative = "/auth/oauth/ark_server/v1/server/manage",
                         AuthServerUrl = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/oauth")}",
                         ClientId = client_id,
                         TenantId = tt.tenant_id,
