@@ -162,4 +162,18 @@ namespace Ark.oAuth
         public DateTime at { get; set; } = DateTime.UtcNow;
 
     }
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    [Index(nameof(email), IsUnique = true)]
+    public class ArkAuthStatusTrace
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public int id { get; set; }
+        public string email { get; set; }
+        public int retry_count { get; set; }
+        public bool complex_policy { get; set; } = false;
+        public string ip { get; set; }
+        public DateTime at { get; set; } = DateTime.UtcNow;
+
+    }
 }

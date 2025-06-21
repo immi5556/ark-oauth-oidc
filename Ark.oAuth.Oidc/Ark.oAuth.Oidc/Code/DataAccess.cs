@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Mysqlx.Expr;
 using MySqlX.XDevAPI;
 
 namespace Ark.oAuth.Oidc
@@ -226,7 +227,11 @@ namespace Ark.oAuth.Oidc
             if (clnt == null) throw new ApplicationException("invalid creds client");
             var usr_cl_cl = _ctx.user_client_claims.FirstOrDefault(t => t.email == un && (t.client_id ?? "").ToLower() == (clnt.id ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
             if (usr_cl_cl == null) throw new ApplicationException("invalid creds client.");
-            if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw)) throw new ApplicationException("invalid creds.");
+            if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw))
+            {
+                await UpdateStatus(un, retry: "increment");
+                throw new ApplicationException("invalid creds.");
+            }
             return usr;
         }
         public async Task<PkceCodeFlow?> GetPkceCode(string code, bool invalidate = false)
@@ -308,6 +313,35 @@ namespace Ark.oAuth.Oidc
                     at = DateTime.UtcNow
                 });
                 _ctx.ChangeTracker.Clear();
+                _ctx.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        }
+        public async Task UpdateStatus(string email, string retry = "reset")
+        {
+            try
+            {
+                var tt = await _ctx.auth_status.FirstOrDefaultAsync(t => (t.email ?? "").ToLower().Trim() == (email ?? "").ToLower().Trim());
+                var rtt = (tt?.retry_count ?? 0);
+                var retry_cnt = retry == "reset" ? 0 : retry == "increment" ? ++rtt : 0;
+                if (tt == null)
+                    _ctx.auth_status.Add(new ArkAuthStatusTrace()
+                    {
+                        email = email,
+                        retry_count = retry_cnt,
+                        complex_policy = true,
+                        ip = "IP",
+                        at = DateTime.UtcNow
+                    });
+                else
+                {
+                    tt.retry_count = retry_cnt;
+                    _ctx.ChangeTracker.Clear();
+                    _ctx.auth_status.Update(tt);
+                }
                 _ctx.SaveChanges();
             }
             catch (Exception ex)
