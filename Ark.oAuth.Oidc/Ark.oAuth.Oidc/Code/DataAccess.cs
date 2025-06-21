@@ -232,6 +232,10 @@ namespace Ark.oAuth.Oidc
                 await UpdateStatus(un, retry: "increment");
                 throw new ApplicationException("invalid creds.");
             }
+            else
+            {
+                await UpdateStatus(un, retry: "reset");
+            }
             return usr;
         }
         public async Task<PkceCodeFlow?> GetPkceCode(string code, bool invalidate = false)
@@ -338,8 +342,9 @@ namespace Ark.oAuth.Oidc
                     });
                 else
                 {
-                    tt.retry_count = retry_cnt;
                     _ctx.ChangeTracker.Clear();
+                    tt.retry_count = retry_cnt;
+                    tt.at = DateTime.UtcNow;
                     _ctx.auth_status.Update(tt);
                 }
                 _ctx.SaveChanges();

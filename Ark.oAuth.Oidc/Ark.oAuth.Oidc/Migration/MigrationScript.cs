@@ -61,19 +61,20 @@ namespace Ark.oAuth.Oidc
         protected async Task Up(DataAccess da, string name)
         {
             var pn = da.GetCtx().Database.ProviderName;
+            var nn = "Ark.oAuth.Oidc.Migration.{0}.up." + name;
             switch (pn)
             {
                 case "Microsoft.EntityFrameworkCore.SqlServer":
-                    sqlScript = ReadEmbeddedResource(name);
+                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Sqlserver"));
                     break;
                 case "Npgsql.EntityFrameworkCore.PostgreSQL":
-                    sqlScript = ReadEmbeddedResource(name);
+                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Postgres"));
                     break;
                 case "MySql.EntityFrameworkCore":
-                    sqlScript = ReadEmbeddedResource(name);
+                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Mysql")); 
                     break;
                 case "Microsoft.EntityFrameworkCore.Sqlite":
-                    sqlScript = ReadEmbeddedResource(name);
+                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Sqlite"));
                     break;
                 default:
                     throw new NotSupportedException($"Up failed: {pn}, {name}");
@@ -84,19 +85,20 @@ namespace Ark.oAuth.Oidc
         protected async Task Down(DataAccess da, string name)
         {
             var pn = da.GetCtx().Database.ProviderName;
+            var nn = "Ark.oAuth.Oidc.Migration.{0}.down." + name;
             switch (pn)
             {
                 case "Microsoft.EntityFrameworkCore.SqlServer":
-                    sqlScript = ReadEmbeddedResource(name);
+                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Sqlserver"));
                     break;
                 case "Npgsql.EntityFrameworkCore.PostgreSQL":
-                    sqlScript = ReadEmbeddedResource(name);
+                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Postgres"));
                     break;
                 case "MySql.EntityFrameworkCore":
-                    sqlScript = ReadEmbeddedResource(name);
+                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Mysql"));
                     break;
                 case "Microsoft.EntityFrameworkCore.Sqlite":
-                    sqlScript = ReadEmbeddedResource(name);
+                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Sqlite"));
                     break;
                 default:
                     throw new NotSupportedException($"Down failed: {pn}, {name}");

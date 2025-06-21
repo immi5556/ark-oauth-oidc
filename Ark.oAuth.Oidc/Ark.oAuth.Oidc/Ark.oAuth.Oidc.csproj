@@ -35,17 +35,17 @@
 
 	<ItemGroup>
 	  <None Remove="Controllers\ServerController.cs~RF171f052a.TMP" />
-	  <None Remove="Migration\Sql\down\00001_sql.sql" />
-	  <None Remove="Migration\Sql\down\00002_sql.sql" />
-	  <None Remove="Migration\Sql\up\00001_sql.sql" />
-	  <None Remove="Migration\Sql\up\00002_sql.sql" />
+	  <None Remove="Migration\Sqlite\down\00001_sql.sql" />
+	  <None Remove="Migration\Sqlite\down\00002_sql.sql" />
+	  <None Remove="Migration\Sqlite\up\00001_sql.sql" />
+	  <None Remove="Migration\Sqlite\up\00002_sql.sql" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<EmbeddedResource Include="Migration\Sql\down\00001_sql.sql" />
-		<EmbeddedResource Include="Migration\Sql\down\00002_sql.sql" />
-		<EmbeddedResource Include="Migration\Sql\up\00001_sql.sql" />
-		<EmbeddedResource Include="Migration\Sql\up\00002_sql.sql" />
+		<EmbeddedResource Include="Migration\Sqlite\down\00001_sql.sql" />
+		<EmbeddedResource Include="Migration\Sqlite\down\00002_sql.sql" />
+		<EmbeddedResource Include="Migration\Sqlite\up\00001_sql.sql" />
+		<EmbeddedResource Include="Migration\Sqlite\up\00002_sql.sql" />
 		<EmbeddedResource Include="wwwroot\email\user_activation_.html" />
 		<EmbeddedResource Include="wwwroot\img\profile.png" />
 	</ItemGroup>
