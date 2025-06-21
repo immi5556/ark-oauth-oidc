@@ -87,19 +87,17 @@ namespace Ark.oAuth.Oidc
             switch (pn)
             {
                 case "Microsoft.EntityFrameworkCore.SqlServer":
-                    sqlScript = File.ReadAllText("Migrations/SqlScripts/SqlServer_AddCustomFunction.sql");
+                    sqlScript = ReadEmbeddedResource(name);
                     break;
                 case "Npgsql.EntityFrameworkCore.PostgreSQL":
-                    sqlScript = File.ReadAllText("Migrations/SqlScripts/SqlServer_AddCustomFunction.sql");
+                    sqlScript = ReadEmbeddedResource(name);
                     break;
                 case "MySql.EntityFrameworkCore":
-                    sqlScript = File.ReadAllText("Migrations/SqlScripts/SqlServer_AddCustomFunction.sql");
+                    sqlScript = ReadEmbeddedResource(name);
                     break;
                 case "Microsoft.EntityFrameworkCore.Sqlite":
-                    throw new NotSupportedException(
-                        $"Dropping user-defined functions via raw SQL is not applicable for SQLite. " +
-                        $"Active Provider: {pn}"
-                    );
+                    sqlScript = ReadEmbeddedResource(name);
+                    break;
                 default:
                     throw new NotSupportedException($"Down failed: {pn}, {name}");
             }
