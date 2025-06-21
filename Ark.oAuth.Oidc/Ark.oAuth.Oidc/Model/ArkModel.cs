@@ -44,6 +44,7 @@
     {
         public string TenantId { get; set; }
         public string BasePath { get; set; }
+        public string UploadPath { get; set; }
         public string Provider { get; set; }
         public string DefaultPw { get; set; }
         public bool EnableLogTrace { get; set; }

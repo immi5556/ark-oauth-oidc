@@ -45,6 +45,7 @@ namespace Ark.oAuth
         public string id { get; set; }
         public string tenant_id { get; set; }
         public string client_id { get; set; }
+        public string? client_logo { get; set; }
         public string name { get; set; }
         public string display { get; set; }
         public string domain { get; set; }

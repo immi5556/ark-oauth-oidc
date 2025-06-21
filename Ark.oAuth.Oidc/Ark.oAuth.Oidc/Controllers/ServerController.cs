@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Org.BouncyCastle.Asn1.Cmp;
 
 namespace Ark.oAuth.Oidc.Controllers
 {
@@ -70,9 +71,10 @@ namespace Ark.oAuth.Oidc.Controllers
         public async Task<IActionResult> Index([FromRoute] string tenant_id, [FromQuery] string client_id, [FromQuery] string redirect_uri)
         {
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var cc = await _da.GetClient(tenant_id, client_id);
             ViewBag.IsError = false;
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
-            ViewBag.client_logo = ser.EmailConfig?.client_logo ?? $"";
+            ViewBag.client_logo =  cc?.client_logo ?? ser.EmailConfig?.client_logo ?? $"";
             try
             {
                 tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
@@ -177,12 +179,13 @@ namespace Ark.oAuth.Oidc.Controllers
         {
             //allowed only for server app (app_server)
             var tt = await _da.GetTenant(tenant_id);
+            var cc = await _da.GetClient(tenant_id, client_id);
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             ViewBag.tenant = tt;
             ViewBag.base_path = ser.BasePath;
             ViewBag.IsError = false;
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
-            ViewBag.client_logo = ser.EmailConfig?.client_logo ?? $"";
+            ViewBag.client_logo = cc.client_logo ?? ser.EmailConfig?.client_logo ?? $"";
             ViewBag.logout_url = (await _da.GetClients()).FirstOrDefault()?.logout_url;
             return View();
         }
@@ -216,6 +219,22 @@ namespace Ark.oAuth.Oidc.Controllers
                     Suffix = "",
                     ExpireMins = tt.expire_mins
                 }
+            };
+        }
+        [DisableRequestSizeLimit]
+        [HttpPost]
+        [Route("v1/{client_id}/{type}/upload")]
+        public async Task<dynamic> Upload([FromRoute] string client_id, [FromRoute] string type, IFormFile file)
+        {
+            if (file == null || file.Length == 0) return BadRequest("No file uploaded or file is empty.");
+            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var path = System.IO.Path.Combine($"{ser.UploadPath}", client_id, type, $"{file.FileName}");
+            if (!Directory.Exists(System.IO.Path.GetDirectoryName(path))) Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
+            using (var stream = new FileStream(path, FileMode.OpenOrCreate))
+                await file.CopyToAsync(stream);
+            return new
+            {
+                url = $"/{ser.UploadPath}/{client_id}/{type}.{file.FileName}"
             };
         }
     }
