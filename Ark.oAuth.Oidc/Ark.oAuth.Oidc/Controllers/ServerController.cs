@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Org.BouncyCastle.Asn1.Cmp;
 
@@ -74,7 +75,7 @@ namespace Ark.oAuth.Oidc.Controllers
             var cc = await _da.GetClient(tenant_id, client_id);
             ViewBag.IsError = false;
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
-            ViewBag.client_logo =  cc?.client_logo ?? ser.EmailConfig?.client_logo ?? $"";
+            ViewBag.client_logo = cc?.client_logo ?? ser.EmailConfig?.client_logo ?? $"";
             try
             {
                 tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
@@ -118,7 +119,13 @@ namespace Ark.oAuth.Oidc.Controllers
                 if (cc == null) throw new ApplicationException("invalid_client");
                 if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_redirect_uri");
                 var usr = await _da.ValidateUserCreds(Username, Password, client_id, tenant_id);
-                var tkn = await _ts.BuildAsymmetric_AccessToken(tt, code_challenge);
+                var tkn = await _ts.BuildAsymmetric_AccessToken(tt,
+                    new System.Security.Claims.Claim[]
+                    {
+                        new System.Security.Claims.Claim("code", code_challenge),
+                        new System.Security.Claims.Claim("sub", usr.email),
+                        new System.Security.Claims.Claim("name", usr.name)
+                    }, cc.expire_mins);
                 string code = Guid.NewGuid().ToString();
                 await _da.UpsertPkceCode(tkn.Item1, tt, code, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
                 return Redirect($"{cc.redirect_url}?code={code}&state={state}");
@@ -189,6 +196,14 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.logout_url = (await _da.GetClients()).FirstOrDefault()?.logout_url;
             return View();
         }
+        [Authorize]
+        [Route("{tenant_id}/v1/server/{client_id}/userinfo")]
+        public async Task<dynamic> UserInfo([FromRoute] string tenant_id, [FromRoute] string client_id)
+        {
+            var sub = Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "sub" || t.Type?.ToLower() == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+            var name = Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "name");
+            return await _da.GetUserInfo(sub.Value, tenant_id, client_id);
+        }
 
         [Route("{tenant_id}/v1/.well-known/{client_id}/openid-configuration")]
         public async Task<dynamic> Wellknown([FromRoute] string tenant_id, [FromRoute] string client_id)
@@ -200,6 +215,10 @@ namespace Ark.oAuth.Oidc.Controllers
             var baseurl = $"{(!string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{Request.Scheme}://{Request.Host}")}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : ser.BasePath)}";
             return new
             {
+                issuer = tt.issuer,
+                authorization_endpoint = $"{baseurl}/oauth/{tenant_id}/v1/connect/authorize",
+                token_endpoint = $"{baseurl}/oauth/{tenant_id}/v1/token",
+                userinfo_endpoint = $"{baseurl}/oauth/{tenant_id}/v1/server/{client_id}/userinfo",
                 code_challenge_methods_supported = new List<string>() { "S256" },
                 grant_types_supported = new List<string>() { "authorization_code", "client_credentials", "refresh_token" },
                 response_types_supported = new List<string>() { "code" },

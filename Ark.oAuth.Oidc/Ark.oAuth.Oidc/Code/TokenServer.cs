@@ -18,16 +18,16 @@ namespace Ark.oAuth.Oidc
             _configuration = configuration;
             _da = da;
         }
-        public async System.Threading.Tasks.Task<(string, DateTime)> BuildAsymmetric_AccessToken(ArkTenant tenant, string code)
-        {
-            if (string.IsNullOrEmpty(tenant.rsa_private)) throw new ApplicationException("tenant_cert_missing.");
-            return BuildToken(tenant, 300, new Claim[] { new Claim("code", code) });
-        }
-        internal async System.Threading.Tasks.Task<(string, DateTime)> BuildAsymmetric_AccessToken(ArkTenant tenant, Claim[] claims)
-        {
-            if (string.IsNullOrEmpty(tenant.rsa_private)) throw new ApplicationException("tenant_cert_missing.");
-            return BuildToken(tenant, 300, claims);
-        }
+        //public async System.Threading.Tasks.Task<(string, DateTime)> BuildAsymmetric_AccessToken(ArkTenant tenant, string code)
+        //{
+        //    if (string.IsNullOrEmpty(tenant.rsa_private)) throw new ApplicationException("tenant_cert_missing.");
+        //    return BuildToken(tenant, 300, new Claim[] { new Claim("code", code) });
+        //}
+        //internal async System.Threading.Tasks.Task<(string, DateTime)> BuildAsymmetric_AccessToken(ArkTenant tenant, Claim[] claims)
+        //{
+        //    if (string.IsNullOrEmpty(tenant.rsa_private)) throw new ApplicationException("tenant_cert_missing.");
+        //    return BuildToken(tenant, 300, claims);
+        //}
         internal async System.Threading.Tasks.Task<(string, DateTime)> BuildAsymmetric_AccessToken(ArkTenant tenant, Claim[] claims, int exiration_mins)
         {
             if (string.IsNullOrEmpty(tenant.rsa_private)) throw new ApplicationException("tenant_cert_missing.");

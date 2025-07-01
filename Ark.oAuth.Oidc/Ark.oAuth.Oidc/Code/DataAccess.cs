@@ -112,6 +112,23 @@ namespace Ark.oAuth.Oidc
         {
             return await _ctx.users.ToListAsync();
         }
+        public async Task<dynamic> GetUserInfo(string email, string tenant_id, string client_id)
+        {
+            var cc = await GetClient(tenant_id, client_id);
+            var usr = await _ctx.users.FirstOrDefaultAsync(t => t.email.ToLower() == (email ?? "").ToLower());
+            var clms = await GetUsersClientClaims(email, tenant_id);
+            return new
+            {
+                claims = clms.Find(t => t.client_id?.ToLower() == cc.id.ToLower())?.claims,
+                client_guid = cc.id,
+                client_id = cc.client_id,
+                client_name = cc.name,
+                user = new
+                {
+                    usr.email, usr.name, usr.type
+                }
+            };
+        }
         public async Task<List<ArkUserClientClaim>> GetUsersClientClaims(string email, string tenatn_id)
         {
             return await _ctx.user_client_claims.Where(t1 =>
