@@ -154,7 +154,7 @@
             display: none;
             position: absolute;
             right: 0;
-            top: 40px;
+            top: 60px;
             background-color: #f9f9f9;
             min-width: 160px;
             box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
@@ -327,11 +327,13 @@
                           <div class="font-icon"><i class="fa fa-comments-o"></i></div>
                         </li> *@
                     <li class="nav-profile">
-                        <div class="nav-profile-image">
+                        <div class="nav-profile-image" style="width: 150px;">
                             <img src="~/img/profile.png" alt="profile-img" alt="profile image">
+                            
+                            <span style="padding-left: 20px;">Welcome</span> <br />
+                            <span style="padding-left: 20px;">@ViewBag.profile?.user?.name</span>
                         </div>
                         <div class="navprofile-content">
-                            <a href="#">Profile</a>
                             <a id="logoff" href="javascript:void(0);">Logoff</a>
                         </div>
                     </li>

@@ -23,6 +23,7 @@ namespace Ark.oAuth.Oidc.Web.Controllers
         [Authorize]
         public IActionResult User()
         {
+            ViewBag.profile = Request.ArkUser("ark_server_client");
             return View();
         }
 

@@ -59,6 +59,10 @@ namespace Ark.oAuth
                 SameSite = SameSiteMode.Strict
             });
         }
+        public static dynamic ArkUser(this HttpRequest request, string client_id)
+        {
+            return System.Text.Json.JsonSerializer.Serialize<dynamic>(request.Cookies[$"ark_oauth_ui_claims_{client_id}"] ?? "");
+        }
         public static string? ReadRoute(this HttpRequest request, string key)
         {
             return string.IsNullOrEmpty(key)

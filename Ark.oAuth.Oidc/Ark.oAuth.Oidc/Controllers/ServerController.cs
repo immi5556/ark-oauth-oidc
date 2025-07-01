@@ -193,7 +193,8 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.IsError = false;
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
             ViewBag.client_logo = cc.client_logo ?? ser.EmailConfig?.client_logo ?? $"";
-            ViewBag.logout_url = (await _da.GetClients()).FirstOrDefault()?.logout_url;
+            ViewBag.logout_url = cc.logout_url;
+            ViewBag.profile = await UserInfo(tenant_id, client_id);
             return View();
         }
         [Authorize]

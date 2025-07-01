@@ -491,7 +491,10 @@
     </div>
     <div class="container">
         <div class="sub-container">
-            <h2>User Management</h2>
+            <pre>
+                @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewBag.profile))
+            </pre>
+            <h2>User Management</h2> 
             <button class="add-product-btn" onclick="toggleUserPopover()">
                 + Create User
             </button>
