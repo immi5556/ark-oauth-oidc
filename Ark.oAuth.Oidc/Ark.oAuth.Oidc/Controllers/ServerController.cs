@@ -237,7 +237,8 @@ namespace Ark.oAuth.Oidc.Controllers
                     TenantId = tt.tenant_id,
                     Domain = cc.domain,
                     Suffix = "",
-                    ExpireMins = tt.expire_mins
+                    ExpireMins = tt.expire_mins,
+                    tenants = (await _da.GetTenants()).ToDictionary(t => t.tenant_id, t => t.rsa_public)
                 }
             };
         }
