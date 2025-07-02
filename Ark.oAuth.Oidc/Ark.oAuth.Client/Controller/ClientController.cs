@@ -42,12 +42,13 @@ namespace Ark.oAuth.Client
                 var att = jo["access_token"].GetValue<string>();
                 Response.StoreCookie($"ark_oauth_tkn_{client_id}", att, ccc.ExpireMins, ccc.Domain);
 
+                //Immi: moving to client side, since we need auth server token
                 //get userinfo claims
-                var ff_c = $"{ccc.AuthServerUrl}/oauth/{tenant_id}/v1/server/{client_id}/userinfo";
-                httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {att}");
-                var resp_c = await httpClient.GetStringAsync($"{ff_c}");
-                var jo_c = System.Text.Json.JsonSerializer.Deserialize<JsonObject>(resp_c);
-                Response.StoreCookie($"ark_oauth_ui_claims_{client_id}", resp_c, ccc.ExpireMins, ccc.Domain);
+                //var ff_c = $"{ccc.AuthServerUrl}/oauth/{tenant_id}/v1/server/{client_id}/userinfo";
+                //httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {ccc.}");
+                //var resp_c = await httpClient.GetStringAsync($"{ff_c}");
+                //var jo_c = System.Text.Json.JsonSerializer.Deserialize<JsonObject>(resp_c);
+                //Response.StoreCookie($"ark_oauth_ui_claims_{client_id}", resp_c, ccc.ExpireMins, ccc.Domain);
 
                 ViewBag.redirect = string.Format(ccc.RedirectRelative, client_id);
             }
