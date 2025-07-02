@@ -21,6 +21,7 @@ namespace Ark.oAuth
         public string Domain { get; set; }
         public string Suffix { get; set; } // suffix after client : lh - localhost, azd - azuredev
         public int ExpireMins { get; set; } = 480;
+        public Dictionary<string, string> tenants { get; set; } = new Dictionary<string, string>();
     }
     //public class ArkApp
     //{
@@ -107,7 +108,7 @@ namespace Ark.oAuth
                     IssuerSigningKeyResolver = (string token, SecurityToken securityToken, string kid, TokenValidationParameters validationParameters) =>
                     {
                         List<SecurityKey> keys = new List<SecurityKey>();
-                        var pub_conf_key = ccc.RsaPublic;
+                        var pub_conf_key = (ccc.tenants ?? new Dictionary<string, string>()).ContainsKey(kid) ? ccc.tenants[kid] : ccc.RsaPublic;
                         var publicKey = Convert.FromBase64String(pub_conf_key);
                         RSA rsa = RSA.Create();
                         rsa.ImportSubjectPublicKeyInfo(publicKey, out _);
@@ -143,6 +144,8 @@ namespace Ark.oAuth
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
                         var code_challenge = ctx.Request.Query.ContainsKey("code_challenge") ? ctx.Request.Query["code_challenge"][0] : "";
                         var ff = $"{ccc.AuthServerUrl}/oauth/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
+                        ctx.Request.Headers.Remove("Authorization");
+                        ctx.Response.Headers.Remove("Authorization");
                         ctx.Response.Redirect($"{ff}");
                         return Task.CompletedTask;
                     },

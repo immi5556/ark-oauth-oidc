@@ -69,7 +69,7 @@ namespace Ark.oAuth.Oidc
                 expires: exp_at,
                 signingCredentials: signCreds
             );
-            //jwt.Header.Add("kid", client.client_id);
+            jwt.Header.Add("kid", tenant.tenant_id);
             string token = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().WriteToken(jwt);
             return (token, exp_at);
         }

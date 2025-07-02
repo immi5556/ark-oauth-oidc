@@ -199,11 +199,11 @@ namespace Ark.oAuth.Oidc.Controllers
         }
         [Authorize]
         [Route("{tenant_id}/v1/server/{client_id}/userinfo")]
-        public async Task<dynamic> UserInfo([FromRoute] string tenant_id, [FromRoute] string client_id)
+        public async Task<dynamic> UserInfo([FromRoute] string tenant_id, [FromRoute] string client_id, [FromQuery] string sub = null)
         {
-            var sub = Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "sub" || t.Type?.ToLower() == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier");
+            sub = sub ?? Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "sub" || t.Type?.ToLower() == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
             var name = Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "name");
-            return await _da.GetUserInfo(sub.Value, tenant_id, client_id);
+            return await _da.GetUserInfo(sub, tenant_id, client_id);
         }
 
         [Route("{tenant_id}/v1/.well-known/{client_id}/openid-configuration")]
