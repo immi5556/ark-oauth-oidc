@@ -528,6 +528,34 @@
 								}
 							});
 						}
+                      },
+                    {
+						formatter: (cell, formatterParams, onRendered) => {
+							var tg = cell.getRow().getData();
+                            return (tg.claims || []).indexOf('service_role') > -1 ? `<button>Regenerate Token</button>` : '';
+						},
+						field: "",
+						width: 160,
+						hozAlign: "center",
+						cellClick: function (e, cell) {
+							//alert("Printing row data for: " + cell.getRow().getData().name)
+							var tg = cell.getRow().getData();
+							//tg.active = tg.active == 'true' ? true: false;
+							console.log('reset pw clicked,', tg);
+							fetch('/@ViewBag.base_path/api/oauth/v1/service/pw/reset', {
+								method: "POST",
+								body: JSON.stringify(tg),
+								headers: {
+									'Accept': 'application/json',
+									'Content-Type': 'application/json'
+								}
+							})
+							.then(t => t.json())
+							.then(t => {
+								if (t.error) ark_alert.alert('f', `${t.msg}`, 3000);
+								else ark_alert.alert('s', `${t.msg}`, 3000);
+							});
+						}
 					}
 				  ],
 				});
@@ -924,7 +952,7 @@
 								else ark_alert.alert('s', `${t.msg}`, 3000);
 							});
 						}
-					}
+                      }
 					]
 				});
 			var scc = document.querySelector("#sel-user");

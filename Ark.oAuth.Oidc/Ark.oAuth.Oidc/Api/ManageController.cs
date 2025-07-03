@@ -254,6 +254,32 @@ namespace Ark.oAuth.Oidc
                 };
             }
         }
+        [HttpPost]
+        [Route("v1/service/pw/reset")]
+        public async Task<dynamic> ServiceUserRegenerateToken([FromServices] DataAccess da, [FromServices] TokenServer ts, [FromBody] ArkUserClientClaim us_cl)
+        {
+            try
+            {
+                ArkUser user = await da.GetUser(us_cl.email);
+                ArkTenant tnt = await da.GetTenant(us_cl.tenant_id);
+                user.hash_pw = (await ts.BuildAsymmetric_AccessToken(tnt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role") }, 525600)).Item1;
+                var dd = await da.UserResetPw(user);
+                return new
+                {
+                    msg = "service account token reset completed.",
+                    data = user
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = us_cl
+                };
+            }
+        }
         [Route("onboard/full")]
         public async Task<dynamic> OnboardFull([FromServices] Onboard onb,
             [FromQuery] string ten_id,

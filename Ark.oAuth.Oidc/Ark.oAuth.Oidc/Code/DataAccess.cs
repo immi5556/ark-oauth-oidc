@@ -112,6 +112,10 @@ namespace Ark.oAuth.Oidc
         {
             return await _ctx.users.ToListAsync();
         }
+        public async Task<ArkUser> GetUser(string email)
+        {
+            return await _ctx.users.FirstOrDefaultAsync(t => t.email == email);
+        }
         public async Task<dynamic> GetUserInfo(string email, string tenant_id, string client_id)
         {
             var cc = await GetClient(tenant_id, client_id);
