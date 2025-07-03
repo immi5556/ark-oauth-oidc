@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
 using System.Text;
@@ -21,15 +22,15 @@ namespace Ark.oAuth
         public string Domain { get; set; }
         public string Suffix { get; set; } // suffix after client : lh - localhost, azd - azuredev
         public int ExpireMins { get; set; } = 480;
-        public Dictionary<string, string> tenants { get; set; } = new Dictionary<string, string>();
+        public Dictionary<string, ArkCert> tenants { get; set; } = new Dictionary<string, ArkCert>();
     }
-    //public class ArkApp
-    //{
-    //    public string LogoutUri { get; set; }
-    //    public string RedirectUri { get; set; }
-    //    public string RedirectRelative { get; set; }
-    //    public string ClientId { get; set; }
-    //}
+    public class ArkCert
+    {
+        public string kid { get; set; } //key 
+        public string RsaPublic { get; set; }
+        public string Audience { get; set; }
+        public string Issuer { get; set; }
+    }
     public static class ArkExtn
     {
         static ArkAuthConfig LoadConfig(IConfiguration configuration)
@@ -101,14 +102,14 @@ namespace Ark.oAuth
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidIssuer = ccc.Issuer,
+                    //ValidIssuer = ccc.Issuer,
                     ValidateAudience = true,
-                    ValidAudience = ccc.Audience,
+                    //ValidAudience = ccc.Audience,
                     ValidateLifetime = true,
                     IssuerSigningKeyResolver = (string token, SecurityToken securityToken, string kid, TokenValidationParameters validationParameters) =>
                     {
                         List<SecurityKey> keys = new List<SecurityKey>();
-                        var pub_conf_key = (ccc.tenants ?? new Dictionary<string, string>()).ContainsKey(kid) ? ccc.tenants[kid] : ccc.RsaPublic;
+                        var pub_conf_key = (ccc.tenants ?? new Dictionary<string, ArkCert>()).ContainsKey(kid) ? ccc.tenants[kid].RsaPublic : ccc.RsaPublic;
                         var publicKey = Convert.FromBase64String(pub_conf_key);
                         RSA rsa = RSA.Create();
                         rsa.ImportSubjectPublicKeyInfo(publicKey, out _);
@@ -116,21 +117,36 @@ namespace Ark.oAuth
                         return keys;
                     },
                     ValidateIssuerSigningKey = true,
-                    //AudienceValidator = (IEnumerable<string> issuer, SecurityToken securityToken, TokenValidationParameters validationParameters) =>
-                    //{
-                    //    return true;
-                    //},
-                    //IssuerValidator = (string issuer, SecurityToken securityToken, TokenValidationParameters validationParameters) =>
-                    //{
-                    //    return issuer;
-                    //},
-                    //LifetimeValidator = (DateTime? notBefore, DateTime? expires, SecurityToken securityToken, TokenValidationParameters validationParameters) =>
-                    //{
-                    //    if (notBefore.HasValue && DateTime.UtcNow > notBefore.Value
-                    //    && expires.HasValue && DateTime.UtcNow < expires.Value)
-                    //        return true;
-                    //    return false;
-                    //},
+                    AudienceValidator = (IEnumerable<string> audiences, SecurityToken securityToken, TokenValidationParameters validationParameters) =>
+                    {
+                        if (securityToken is JsonWebToken jwtToken)
+                        {
+                            var kid = jwtToken.Kid?.ToString().ToLower();
+                            var expectedAudience = "";
+                            if (ccc.tenants.ContainsKey(kid)) expectedAudience = (ccc.tenants[kid].Audience ?? "").ToLower().Trim();
+                            return audiences != null && audiences.Select(t => t.ToLower().Trim()).Contains(expectedAudience);
+                        }
+
+                        return false;
+                    },
+                    IssuerValidator = (string issuer, SecurityToken securityToken, TokenValidationParameters validationParameters) =>
+                    {
+                        if (securityToken is JsonWebToken jwtToken)
+                        {
+                            var kid = jwtToken.Kid?.ToString().ToLower();
+                            var expectedIssuer = "invalid~~";
+                            if (ccc.tenants.ContainsKey(kid)) expectedIssuer = (ccc.tenants[kid].Issuer ?? "").ToLower().Trim();
+                            if ((issuer ?? "").ToLower().Trim() != expectedIssuer) throw new SecurityTokenInvalidIssuerException($"unexpected issuer for kid: {kid}");
+                        }
+                        return issuer;
+                    },
+                    LifetimeValidator = (DateTime? notBefore, DateTime? expires, SecurityToken securityToken, TokenValidationParameters validationParameters) =>
+                    {
+                        if (notBefore.HasValue && DateTime.UtcNow > notBefore.Value
+                        && expires.HasValue && DateTime.UtcNow < expires.Value)
+                            return true;
+                        return false;
+                    },
                     ClockSkew = TimeSpan.FromMinutes(1)
                 };
                 options.Events = new JwtBearerEvents
@@ -144,8 +160,6 @@ namespace Ark.oAuth
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
                         var code_challenge = ctx.Request.Query.ContainsKey("code_challenge") ? ctx.Request.Query["code_challenge"][0] : "";
                         var ff = $"{ccc.AuthServerUrl}/oauth/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
-                        ctx.Request.Headers.Remove("Authorization");
-                        ctx.Response.Headers.Remove("Authorization");
                         ctx.Response.Redirect($"{ff}");
                         return Task.CompletedTask;
                     },
@@ -179,7 +193,6 @@ namespace Ark.oAuth
                     }
                 };
             });
-
             services.AddHttpContextAccessor();
             services.AddScoped<ArkAuthContext>();
         }
