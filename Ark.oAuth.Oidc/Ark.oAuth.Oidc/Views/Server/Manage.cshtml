@@ -540,6 +540,7 @@
 						cellClick: function (e, cell) {
 							//alert("Printing row data for: " + cell.getRow().getData().name)
 							var tg = cell.getRow().getData();
+							if (tg.type != 'service') return;
 							//tg.active = tg.active == 'true' ? true: false;
 							console.log('reset pw clicked,', tg);
 							fetch('/@ViewBag.base_path/api/oauth/v1/service/pw/reset', {
