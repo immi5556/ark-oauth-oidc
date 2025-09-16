@@ -15,7 +15,7 @@
 		<Title>Ark's IdP oAuth2 oidc basic flows</Title>
 		<PackageTags>oauth2-oidc; identity server; oauth2 client</PackageTags>
 		<PackageReleaseNotes>trying to do oauth2 a simpler for developers</PackageReleaseNotes>
-		<RepositoryUrl>https://github.com/immi5556/ark-oauth-oidc</RepositoryUrl>
+		<RepositoryUrl>https://github.com/ir-dev/ark-oauth-oidc</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<RepositoryBranch>main</RepositoryBranch>
 	</PropertyGroup>

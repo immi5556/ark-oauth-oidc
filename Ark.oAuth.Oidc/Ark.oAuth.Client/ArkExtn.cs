@@ -119,7 +119,7 @@ namespace Ark.oAuth
                     ValidateIssuerSigningKey = true,
                     AudienceValidator = (IEnumerable<string> audiences, SecurityToken securityToken, TokenValidationParameters validationParameters) =>
                     {
-                        if (securityToken is JsonWebToken jwtToken)
+                       if (securityToken is JsonWebToken jwtToken)
                         {
                             var kid = jwtToken.Kid?.ToString().ToLower();
                             var expectedAudience = "";
