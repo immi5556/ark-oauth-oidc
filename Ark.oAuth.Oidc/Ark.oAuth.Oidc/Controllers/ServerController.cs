@@ -1,4 +1,5 @@
 ﻿using System.Security.Claims;
+using ark.net.util;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Org.BouncyCastle.Asn1.Cmp;
@@ -194,7 +195,7 @@ namespace Ark.oAuth.Oidc.Controllers
             var cc = await _da.GetClient(tenant_id, client_id);
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             ViewBag.tenant = tt;
-            ViewBag.base_path = ser.BasePath;
+            ViewBag.base_path = ser.BasePath.AnyNull() ? "" : $"/{ser.BasePath}";
             ViewBag.IsError = false;
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
             ViewBag.client_logo = cc.client_logo ?? ser.EmailConfig?.client_logo ?? $"";

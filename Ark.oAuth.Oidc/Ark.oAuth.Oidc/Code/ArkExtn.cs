@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using System.Reflection;
+using ark.net.util;
 
 namespace Ark.oAuth.Oidc
 {
@@ -125,7 +126,7 @@ namespace Ark.oAuth.Oidc
                                 domain = $"{domain}",
                                 expire_mins = 480,
                                 name = $"{ser.TenantId} name",
-                                redirect_relative = $"${ser.BasePath}/oauth/{ser.TenantId}/v1/server/{ser.TenantId}_client/manage",
+                                redirect_relative = $"{(ser.BasePath.AnyNull() ? "" : $"/{ser.BasePath}")}/oauth/{ser.TenantId}/v1/server/{ser.TenantId}_client/manage",
                                 //redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/{{0}}/manage",
                                 redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
                                 //redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{{0}}/callback",

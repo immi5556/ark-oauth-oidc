@@ -414,7 +414,7 @@
 			  if (e.key === "Enter") {
 				const value = e.target.value.trim();
 				if (value && !externalTags.includes(value)) {
-				  fetch('/@ViewBag.base_path/api/oauth/v1/claim/upsert', {
+				  fetch('@ViewBag.base_path/api/oauth/v1/claim/upsert', {
 							method: "POST",
 							body: JSON.stringify({
 								key: value,
@@ -487,7 +487,7 @@
 							var tg = cell.getRow().getData();
 							//tg.active = tg.active == 'true' ? true: false;
 							console.log('save clicked,', tg);
-							fetch('/@ViewBag.base_path/api/oauth/v1/user/client/claims/upsert', {
+							fetch('@ViewBag.base_path/api/oauth/v1/user/client/claims/upsert', {
 							method: "POST",
 							body: JSON.stringify(tg),
 							headers: {
@@ -511,7 +511,7 @@
 							//alert("Printing row data for: " + cell.getRow().getData().name)
 							var tg = cell.getRow().getData();
 							tg.active = tg.active == 'true' ? true: false;
-							fetch('/@ViewBag.base_path/api/oauth/v1/user/client/claims/delete', {
+							fetch('@ViewBag.base_path/api/oauth/v1/user/client/claims/delete', {
 								method: "POST",
 								body: JSON.stringify(tg),
 								headers: {
@@ -543,7 +543,7 @@
 							if (tg.type != 'service') return;
 							//tg.active = tg.active == 'true' ? true: false;
 							console.log('reset pw clicked,', tg);
-							fetch('/@ViewBag.base_path/api/oauth/v1/service/pw/reset', {
+							fetch('@ViewBag.base_path/api/oauth/v1/service/pw/reset', {
 								method: "POST",
 								body: JSON.stringify(tg),
 								headers: {
@@ -564,7 +564,7 @@
 			var user_id = document.querySelector("#sel-user").value;
 			var u_tnt = document.querySelector("#sel-tenant").value;
 			if (user_id && u_tnt) {
-				fetch(`/@ViewBag.base_path/api/oauth/v1/user/list/client/claims/mapping/${user_id}/${u_tnt}`)
+				fetch(`@ViewBag.base_path/api/oauth/v1/user/list/client/claims/mapping/${user_id}/${u_tnt}`)
 				.then(t => t.json())
 				.then(t => {
 					tableData = t.data;
@@ -621,7 +621,7 @@
 		});
 		// Initial render
 		//renderTags();
-		fetch('/@ViewBag.base_path/api/oauth/v1/claim/list')
+		fetch('@ViewBag.base_path/api/oauth/v1/claim/list')
 		.then(t => t.json())
 		.then(t => {
 			externalTags = t.data.map(t1 => t1.key);
@@ -682,14 +682,14 @@
     <script>
 		var tbl_tenant, ten_lst;
 		var load_tenant = () => {
-			fetch('/@ViewBag.base_path/api/oauth/v1/tenant/list')
+			fetch('@ViewBag.base_path/api/oauth/v1/tenant/list')
 			.then(t => t.json())
 			.then(t => {
 				tbl_tenant = master_table({
 					data: t.data,
 					selector: '#tbl_tenant',
 					onsave: (tg) => {
-						fetch('/@ViewBag.base_path/api/oauth/v1/tenant/upsert', {
+						fetch('@ViewBag.base_path/api/oauth/v1/tenant/upsert', {
 								method: "POST",
 								body: JSON.stringify(tg),
 								headers: {
@@ -725,14 +725,14 @@
     <script>
 		var tbl_client;
 		var load_client = () => {
-			fetch('/@ViewBag.base_path/api/oauth/v1/client/list')
+			fetch('@ViewBag.base_path/api/oauth/v1/client/list')
 			.then(t => t.json())
 			.then(t => {
 				tbl_client = master_table({
 					data: t.data,
 					selector: '#tbl_client',
 					onsave: (tg) => {
-						fetch('/@ViewBag.base_path/api/oauth/v1/client/upsert', {
+						fetch('@ViewBag.base_path/api/oauth/v1/client/upsert', {
 								method: "POST",
 								body: JSON.stringify(tg),
 								headers: {
@@ -779,7 +779,7 @@
 							//alert("Printing row data for: " + cell.getRow().getData().name)
 							var tg = cell.getRow().getData();
 							tg.active = tg.active == 'true' ? true: false;
-							fetch('/@ViewBag.base_path/api/oauth/v1/client/delete', {
+							fetch('@ViewBag.base_path/api/oauth/v1/client/delete', {
 								method: "POST",
 								body: JSON.stringify(tg),
 								headers: {
@@ -867,7 +867,7 @@
 							//formatterParams - parameters set for the column
 							//onRendered - function to call when the formatter has been rendered
 							var dd = cell.getRow().getData();
-							if (dd && dd.client_id && dd.tenant_id) return `<a href='/@ViewBag.base_path/oauth/${dd.tenant_id}/v1/.well-known/${dd.client_id}/openid-configuration' target='_blank'>config</a>`
+							if (dd && dd.client_id && dd.tenant_id) return `<a href='@ViewBag.base_path/oauth/${dd.tenant_id}/v1/.well-known/${dd.client_id}/openid-configuration' target='_blank'>config</a>`
 							return '';
 						}
 					});
@@ -880,7 +880,7 @@
     </script>
     <script>
 		var tbl_user;
-		fetch('/@ViewBag.base_path/api/oauth/v1/user/list')
+		fetch('@ViewBag.base_path/api/oauth/v1/user/list')
 		.then(t => t.json())
 		.then(t => {
 			tbl_user = new Tabulator("#tbl_user", {
@@ -914,7 +914,7 @@
 						width:60,
 						hozAlign:"center",
 						cellClick:function(e, cell) {
-							fetch('/@ViewBag.base_path/api/oauth/v1/user/upsert', {
+							fetch('@ViewBag.base_path/api/oauth/v1/user/upsert', {
 								method: "POST",
 								body: JSON.stringify(cell.getRow().getData()),
 								headers: {
@@ -939,7 +939,7 @@
 							var tg = cell.getRow().getData();
 							//tg.active = tg.active == 'true' ? true: false;
 							console.log('reset pw clicked,', tg);
-							fetch('/@ViewBag.base_path/api/oauth/v1/user/pw/reset/init', {
+							fetch('@ViewBag.base_path/api/oauth/v1/user/pw/reset/init', {
 							method: "POST",
 							body: JSON.stringify(tg),
 							headers: {
@@ -971,7 +971,7 @@
     <script>
 		document.getElementById("logoff").addEventListener("click", evt => {
 			fetch('@ViewBag.logout_url').then(t => {
-				window.location.href = '/@ViewBag.base_path';
+				window.location.href = '@ViewBag.base_path';
 			});
 		});
     </script>
