@@ -21,7 +21,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Content Remove="wwwroot\css\ark-oauth-login.css" />
+		<Content Remove="wwwroot/css/ark-oauth-login.css" />
 		<Content Remove="wwwroot\email\user_activation_.html" />
 		<Content Remove="wwwroot\img\ark-auth.gif" />
 		<Content Remove="wwwroot\img\ark_idp.png" />
@@ -34,7 +34,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Remove="Controllers\ServerController.cs~RF171f052a.TMP" />
 	  <None Remove="Migration\Sqlite\down\00001_sql.sql" />
 	  <None Remove="Migration\Sqlite\down\00002_sql.sql" />
 	  <None Remove="Migration\Sqlite\up\00001_sql.sql" />
@@ -42,7 +41,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<EmbeddedResource Include="Migration\Sqlite\down\00001_sql.sql" />
+		<EmbeddedResource Include="Migration/Sqlite/down/00001_sql.sql" />
 		<EmbeddedResource Include="Migration\Sqlite\down\00002_sql.sql" />
 		<EmbeddedResource Include="Migration\Sqlite\up\00001_sql.sql" />
 		<EmbeddedResource Include="Migration\Sqlite\up\00002_sql.sql" />
@@ -59,7 +58,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<EmbeddedResource Include="wwwroot\css\ark-oauth-login.css" />
+		<EmbeddedResource Include="wwwroot/css/ark-oauth-login.css" />
 		<EmbeddedResource Include="wwwroot\img\ark-auth.gif" />
 		<EmbeddedResource Include="wwwroot\img\ark_idp.png" />
 		<EmbeddedResource Include="wwwroot\img\ark_logo_1.png" />

@@ -22,32 +22,32 @@ namespace Ark.oAuth.Oidc
             var names = foundationAssembly.GetManifestResourceNames();
             foreach (var name in names)
             {
-                var filePath = name;
-
+                var ext = System.IO.Path.GetExtension(name);
+                var filePath = System.IO.Path.GetFileNameWithoutExtension(name);
                 // Embedded files are prefixed with the full namespace of the assembly, so your file is stored at wwwroot/foundation.css, then
                 // Here, we strip the assembly name from the start - note the following '.' too
                 filePath = filePath.Replace(assemblyName + ".", "");
 
                 // Parse file path
-                filePath = filePath.Replace(".", "\\");
+                filePath = filePath.Replace('.', Path.DirectorySeparatorChar) + ext;
 
                 // Reset files - order is important!!
-                filePath = this.ResetFileExtension(filePath, ".cshtml");
-                filePath = this.ResetFileExtension(filePath, ".min.css");
-                filePath = this.ResetFileExtension(filePath, ".css");
-                filePath = this.ResetFileExtension(filePath, ".d.ts");
-                filePath = this.ResetFileExtension(filePath, ".min.js");
-                filePath = this.ResetFileExtension(filePath, ".js");
-                filePath = this.ResetFileExtension(filePath, ".otf");
-                filePath = this.ResetFileExtension(filePath, ".eot");
-                filePath = this.ResetFileExtension(filePath, ".svg");
-                filePath = this.ResetFileExtension(filePath, ".ttf");
-                filePath = this.ResetFileExtension(filePath, ".woff");
-                filePath = this.ResetFileExtension(filePath, ".png");
-                filePath = this.ResetFileExtension(filePath, ".jpg");
-                filePath = this.ResetFileExtension(filePath, ".gif");
-                filePath = this.ResetFileExtension(filePath, ".ico");
-                filePath = this.ResetFileExtension(filePath, ".html");
+                // filePath = this.ResetFileExtension(filePath, ".cshtml");
+                // filePath = this.ResetFileExtension(filePath, ".min.css");
+                // filePath = this.ResetFileExtension(filePath, ".css");
+                // filePath = this.ResetFileExtension(filePath, ".d.ts");
+                // filePath = this.ResetFileExtension(filePath, ".min.js");
+                // filePath = this.ResetFileExtension(filePath, ".js");
+                // filePath = this.ResetFileExtension(filePath, ".otf");
+                // filePath = this.ResetFileExtension(filePath, ".eot");
+                // filePath = this.ResetFileExtension(filePath, ".svg");
+                // filePath = this.ResetFileExtension(filePath, ".ttf");
+                // filePath = this.ResetFileExtension(filePath, ".woff");
+                // filePath = this.ResetFileExtension(filePath, ".png");
+                // filePath = this.ResetFileExtension(filePath, ".jpg");
+                // filePath = this.ResetFileExtension(filePath, ".gif");
+                // filePath = this.ResetFileExtension(filePath, ".ico");
+                // filePath = this.ResetFileExtension(filePath, ".html");
 
                 // Now prepend the root path of this application, on disk
                 filePath = System.IO.Path.Combine(env.ContentRootPath, filePath);
@@ -125,7 +125,7 @@ namespace Ark.oAuth.Oidc
                                 domain = $"{domain}",
                                 expire_mins = 480,
                                 name = $"{ser.TenantId} name",
-                                redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/{ser.TenantId}_client/manage",
+                                redirect_relative = $"${ser.BasePath}/oauth/{ser.TenantId}/v1/server/{ser.TenantId}_client/manage",
                                 //redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/{{0}}/manage",
                                 redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
                                 //redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{{0}}/callback",

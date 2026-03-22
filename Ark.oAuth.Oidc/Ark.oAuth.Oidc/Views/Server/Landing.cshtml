@@ -1,0 +1,111 @@
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ark Identity Platform</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<style>
+.hero {
+    background: linear-gradient(120deg, #6366f1, #0ea5e9);
+    color: white;
+    padding: 100px 20px;
+    text-align: center;
+}
+.feature-card {
+    border-radius: 12px;
+    padding: 20px;
+    background: #f8fafc;
+    transition: 0.3s;
+}
+.feature-card:hover {
+    transform: translateY(-5px);
+}
+</style>
+</head>
+
+<body>
+
+<!-- HERO -->
+<section class="hero" style="display:flex;justify-content: center;">
+    <div>
+        <img src="img/ark_logo_1.png" />
+    </div>
+    <div style="margin-left: 30px;">
+        <h1>Identity. Simplified.</h1>
+        <p>OAuth2 & OpenID Connect Server for Modern Applications</p>
+        <a href="/register-client" class="btn btn-light btn-lg mt-3">Get Started</a>
+    </div>
+</section>
+
+<!-- FEATURES -->
+<section class="container py-5">
+    <div class="row text-center">
+
+        <div class="col-md-4 mb-4">
+            <div class="feature-card">
+                <h4>🔐 Secure Authentication</h4>
+                <p>Built on OAuth2 & OpenID Connect standards.</p>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-4">
+            <div class="feature-card">
+                <h4>🔁 Token Management</h4>
+                <p>Access, Refresh & ID Tokens with lifecycle control.</p>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-4">
+            <div class="feature-card">
+                <h4>🌐 Single Sign-On</h4>
+                <p>Enable seamless login across multiple apps.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row text-center mt-4">
+
+        <div class="col-md-4 mb-4">
+            <div class="feature-card">
+                <h4>⚙️ Client Onboarding</h4>
+                <p>Register apps, configure redirect URIs & scopes.</p>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-4">
+            <div class="feature-card">
+                <h4>📡 Standards Compliant</h4>
+                <p>Supports Authorization Code, PKCE, JWT.</p>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-4">
+            <div class="feature-card">
+                <h4>🛡️ Secure Tokens</h4>
+                <p>Short-lived tokens improve security posture.</p>
+            </div>
+        </div>
+
+    </div>
+</section>
+
+<!-- ONBOARD FLOW -->
+<section class="bg-light py-5 text-center">
+    <h2>Start Integrating in Minutes</h2>
+    <p>Register your app → Get Client ID → Start OAuth Flow</p>
+    <a href="/dashboard" class="btn btn-primary btn-lg">Go to Dashboard</a>
+</section>
+
+<!-- FOOTER -->
+<footer class="text-center py-4">
+    <small>© Ark Identity Platform</small>
+</footer>
+
+</body>
+</html>

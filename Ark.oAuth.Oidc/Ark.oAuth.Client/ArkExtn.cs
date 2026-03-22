@@ -94,7 +94,7 @@ namespace Ark.oAuth
                 .AddAuthentication(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
-                options.RequireHttpsMetadata = false; // Set to true in production
+                options.RequireHttpsMetadata = true; // Set to true in production
                 options.SaveToken = true;
                 // Enable detailed logging in your token validation
                 options.IncludeErrorDetails = true;
@@ -119,7 +119,7 @@ namespace Ark.oAuth
                     ValidateIssuerSigningKey = true,
                     AudienceValidator = (IEnumerable<string> audiences, SecurityToken securityToken, TokenValidationParameters validationParameters) =>
                     {
-                       if (securityToken is JsonWebToken jwtToken)
+                        if (securityToken is JsonWebToken jwtToken)
                         {
                             var kid = jwtToken.Kid?.ToString().ToLower();
                             var expectedAudience = "";
@@ -177,13 +177,18 @@ namespace Ark.oAuth
                     OnChallenge = ctx =>
                     {
                         ctx.HandleResponse();
-                        var client_id = ctx.Request.ReadRoute(ccc.RouteKey) ?? ccc.ClientId;
-                        var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
-                        var code_verifier = $"JESUSmyLORD_{ark.net.util.DateUtil.CurrentTimeStamp()}";
-                        var code_challenge = PkceHelper.GenerateCodeChallenge(code_verifier);
-                        var ff = $"{ccc.AuthServerUrl}/oauth/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
-                        ctx.Response.StoreCookie($"ark_oauth_cv_{client_id}", code_verifier, ccc.ExpireMins, ccc.Domain);
-                        ctx.Response.Redirect($"{ff}");
+                        var endpoint = ctx.HttpContext?.GetEndpoint();
+                        var authorizeData = endpoint?.Metadata.GetOrderedMetadata<IAuthorizeData>();
+                        if (authorizeData?.Any() == true) //authorize attribute
+                        {
+                            var client_id = ctx.Request.ReadRoute(ccc.RouteKey) ?? ccc.ClientId;
+                            var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
+                            var code_verifier = $"JESUSmyLORD_{ark.net.util.DateUtil.CurrentTimeStamp()}";
+                            var code_challenge = PkceHelper.GenerateCodeChallenge(code_verifier);
+                            var ff = $"{ccc.AuthServerUrl}/oauth/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
+                            ctx.Response.StoreCookie($"ark_oauth_cv_{client_id}", code_verifier, ccc.ExpireMins, ccc.Domain);
+                            ctx.Response.Redirect($"{ff}");
+                        }
                         return Task.CompletedTask;
                     },
                     OnMessageReceived = msg =>
