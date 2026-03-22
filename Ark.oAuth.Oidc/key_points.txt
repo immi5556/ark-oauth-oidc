@@ -1,3 +1,116 @@
+Step by Step guide for setting "Auth Server"
+
+	1. Create a Asp.net cortroller project & add nuget referece to both Ark.oAuth.Oidc & Ark.oAuth.client nuget packages
+
+	2. Make sure the sequnce of Middleware is carefully handled and the correct sequnce of order is managed i nmidlleware in the referred IDP parent project , workign example below (As on 22-Mar-26)
+
+							using Ark.oAuth;
+							using Ark.oAuth.Oidc;
+							
+							var builder = WebApplication.CreateBuilder(args);
+							
+							builder.Services.AddArkOidcServer(builder.Environment);
+							builder.Services.AddArkOidcClient(builder.Configuration);
+							
+							// Add services to the container.
+							builder.Services.AddControllersWithViews();
+							
+							var app = builder.Build();
+							
+							// Configure the HTTP request pipeline.
+							if (!app.Environment.IsDevelopment())
+							{
+							    app.UseExceptionHandler("/Home/Error");
+							    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+							    app.UseHsts();
+							}
+							
+							//app.UseStaticFiles();
+							app.UseHttpsRedirection();
+							
+							app.UseRouting();
+							app.UseArkAuthData(); //server
+							app.UseArkOidcClient(); //cleint
+							app.UseAuthentication();
+							app.UseAuthorization();
+							
+							app.MapStaticAssets();
+							app.MapControllerRoute(
+							    name: "default",
+							    pattern: "{controller=Home}/{action=Index}/{id?}")
+							    .WithStaticAssets();
+							
+							
+							app.Run();
+
+	3. in app setttings.json, just setup the below tempate as a 'ark_oauth_server' config section. and nothing else needed, but make sure to change the credentials & titles accordingly
+
+			"ark_oauth_server": {
+			    "TenantId": "ark_news_server", // creates automatically a client app for this server to admin console
+			    "BasePath": "",
+			    "BaseUrl": "https://ark-news-idp.immanuel.co",
+			    "Provider": "sqlite", // supported "sqlite" (default), mysql, postgres, sqlserver
+			    "EnableLogTrace": true,
+			    "CcList": "ark.idp@immanuel.co", //either , or ; seperated emails
+			    "BccList": "raj@immanuel.co", //either , or ; seperated emails
+			    "UploadPath": "./wwwroot/{0}/",
+			    "DefaultPw": "<<pw>>",
+			    "EmailConfig": {
+			      "email": "ark.idp@immanuel.co",
+			      "pw": "<<pw>",
+			      "from": "ark.idp@immanuel.co",
+			      "display": "Ark News (IdP)",
+			      "subject": "ARK News (IdP): ", //subject prefix: 
+			      "smtp": "webmail.immanuel.co",
+			      "port": "25",
+			      "host_logo": "https://ark-news-idp.immanuel.co/img/ark_oidc_logo_2.png",
+			      "client_logo": "https://ark-news-idp.immanuel.co/img/ark_logo_1.png",
+			      "activation_link": "https://ark-news-idp.immanuel.co/oauth/{0}/v1/password/reset/{1}",
+			      "host_company_name": "ARK-RAPID (Journalist Dept.)",
+			      "terms_url": "https://ark-news-idp.immanuel.co",
+			      "privacy_policy_url": "https://ark-news-idp.immanuel.co",
+			      "host_website_url": "https://ark-news-idp.immanuel.co",
+			      "client_website_url": "https://ark-news-idp.immanuel.co",
+			      "host_company_display": "ARK NEWS (IdP) - Identity Provider"
+			    }
+			  },
+
+	4. Once this setup is done, deploy the code to the server, run the page. whcih will load your projects landing page. (if this load succesfully then all IDP setup is working fine).
+		what happens in the background is, default clietn app is created for the IDP, with an naming conention of "<<TenantId>>_client"
+
+	5. below is the wellknow config url for your idp server, append below url to your base url
+		- /oauth/<<TenantId>>/v1/.well-known/<<TenantId>>_client/openid-configuration
+		ex: as belowm where TenantId = ark_news_server, as in the prev step server config settings
+		- /oauth/ark_news_server/v1/.well-known/ark_news_server_client/openid-configuration
+
+	6, this url will fetch the below client_config section for the IDP admin console. 
+			- one addition cleanup action we have to do is, remove the routeKey array items and make it empty. (the reason is to support SAAS model, the route key will look for the name provided in this to fetch the appropriate client name. since this is an IDP - this is not reaquired. but  for the onboarder clients with multiple clients hosted on same server. this is very essensial)
+
+				"ark_oauth_client": {
+				    "issuer": "https://ark-news-idp.immanuel.co/ark/oauth/v1/iss",
+				    "audience": "https://ark-news-idp.immanuel.co/ark/oauth/v1/aud",
+				    "rsaPublic": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3SURiwnt0Ts7o9hXhQ/3kQmR3AY9VBldMtxlLnVP4rhfckGBVVRlov9QwLeiblC+Zuw+hShu87JnZewSFip1BGIP1v+kHkBOFgZeVdf5CRFT11r+HYpG0PXuCycTujlyJwrPXzAexHx9CcDfyKfspbWI6b2Qzx+AltfNKaTd6St9LH2f72dXY82vkcO1bKSMEhzUkBGB9BvTXnzTuOAU+TnUH5hrw4Xd5hAZmVTPLLtxHNnfWLKKHXcvtsI5m7WUSb6GFioPQQhM6W9QqkcfY7qPllXDiJbIfJd/6rx2qfLBwAWxiQFWXlvIEZfhC2jQ6/Wht3pS5tnQAfh/c4qM9QIDAQAB",
+				    "redirectUri": "https://ark-news-idp.immanuel.co/oauth/ark_news_server/v1/client/ark_news_server_client/callback",
+				    "redirectRelative": "$/oauth/ark_news_server/v1/server/ark_news_server_client/manage",
+				    "logoutUri": "https://ark-news-idp.immanuel.co/oauth/ark_news_server/v1/client/ark_news_server_client/logoff",
+				    "authServerUrl": "https://ark-news-idp.immanuel.co",
+				    "clientId": "ark_news_server_client",
+				    "routeKey": [],
+				    "tenantId": "ark_news_server",
+				    "domain": "ark-news-idp.immanuel.co",
+				    "suffix": "",
+				    "expireMins": 480,
+				    "tenants": {
+				      "ark_news_server": {
+				        "rsaPublic": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3SURiwnt0Ts7o9hXhQ/3kQmR3AY9VBldMtxlLnVP4rhfckGBVVRlov9QwLeiblC+Zuw+hShu87JnZewSFip1BGIP1v+kHkBOFgZeVdf5CRFT11r+HYpG0PXuCycTujlyJwrPXzAexHx9CcDfyKfspbWI6b2Qzx+AltfNKaTd6St9LH2f72dXY82vkcO1bKSMEhzUkBGB9BvTXnzTuOAU+TnUH5hrw4Xd5hAZmVTPLLtxHNnfWLKKHXcvtsI5m7WUSb6GFioPQQhM6W9QqkcfY7qPllXDiJbIfJd/6rx2qfLBwAWxiQFWXlvIEZfhC2jQ6/Wht3pS5tnQAfh/c4qM9QIDAQAB",
+				        "kid": "ark_news_server",
+				        "audience": "https://ark-news-idp.immanuel.co/ark/oauth/v1/aud",
+				        "issuer": "https://ark-news-idp.immanuel.co/ark/oauth/v1/iss"
+				      }
+				    }
+				  }
+
+
 
 Auth setup :
 
