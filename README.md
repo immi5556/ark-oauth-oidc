@@ -1,5 +1,54 @@
 # 🚀 Custom OAuth2 & OpenID Connect Identity Server
 
+# The Order of Middleware is Veery important, to make this oauth client to work seamlessly
+
+sample code preview
+
+```
+
+  using Ark.oAuth;
+  using Ark.oAuth.Oidc;
+  
+  var builder = WebApplication.CreateBuilder(args);
+  
+  builder.Services.AddArkOidcServer(builder.Environment);
+  builder.Services.AddArkOidcClient(builder.Configuration);
+  
+  // Add services to the container.
+  builder.Services.AddControllersWithViews();
+  
+  var app = builder.Build();
+  
+  // Configure the HTTP request pipeline.
+  if (!app.Environment.IsDevelopment())
+  {
+      app.UseExceptionHandler("/Home/Error");
+      // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+      app.UseHsts();
+  }
+  
+  //app.UseStaticFiles();
+  app.UseHttpsRedirection();
+  
+  app.UseRouting();
+  app.UseArkAuthData(); //server
+  app.UseArkOidcClient(); //cleint
+  app.UseAuthentication();
+  app.UseAuthorization();
+  
+  app.MapStaticAssets();
+  app.MapControllerRoute(
+      name: "default",
+      pattern: "{controller=Home}/{action=Index}/{id?}")
+      .WithStaticAssets();
+  
+  
+  app.Run();
+
+
+```
+
+
 Welcome to the official documentation for the **ARK Identity Server**, a lightweight OAuth 2.0 and OpenID Connect (OIDC) compliant authorization server designed for secure authentication and token issuance.
 
 This project provides the core components required for building secure authentication flows for web, mobile, and desktop applications.
