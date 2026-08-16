@@ -117,6 +117,10 @@ namespace Ark.oAuth.Oidc
                             var (publicKey, privateKey) = Protocol.ArkCrypto.GenerateRsaKeyPair();
                             var baseurl = !string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}";
                             var domain = new Uri(baseurl).Host;
+                            // Every URL registered below has to be built from the same public root
+                            // the client will actually call back to, BasePath included.
+                            var approot = Protocol.ArkOidcEndpoints.PublicRoot(
+                                new ArkAuthServerConfig { BaseUrl = baseurl, BasePath = ser.BasePath });
                             //1st time -> create client for server to manage users
                             var tt = new ArkTenant()
                             {
@@ -156,9 +160,8 @@ namespace Ark.oAuth.Oidc
                                 name = $"{ser.TenantId} name",
                                 redirect_relative = $"{(ser.BasePath.AnyNull() ? "" : $"/{ser.BasePath}")}/oauth/{ser.TenantId}/v1/server/{ser.TenantId}_client/manage",
                                 //redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/{{0}}/manage",
-                                redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
-                                //redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{{0}}/callback",
-                                logout_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
+                                redirect_url = $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
+                                logout_url = $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
 
                                 // standard registration metadata for the admin console client.
@@ -175,14 +178,14 @@ namespace Ark.oAuth.Oidc
                                 redirect_uris = new List<string>()
                                 {
                                     // the v1 callback, kept so existing deployments keep working
-                                    $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
+                                    $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
                                     // the standard callback used by the ASP.NET Core OIDC handler
-                                    $"{baseurl}/signin-oidc"
+                                    $"{approot}/signin-oidc"
                                 },
                                 post_logout_redirect_uris = new List<string>()
                                 {
-                                    $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
-                                    $"{baseurl}/signout-callback-oidc"
+                                    $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
+                                    $"{approot}/signout-callback-oidc"
                                 }
                             };
                             dbContext.clients.Add(cll);
@@ -251,6 +254,8 @@ namespace Ark.oAuth.Oidc
                             });
                             dbContext.SaveChanges();
                         }
+
+                        ReconcileAdminConsoleClient(scope.ServiceProvider);
                     }
                     catch (Exception ex)
                     {
@@ -260,6 +265,70 @@ namespace Ark.oAuth.Oidc
                 }
                 await next();
             });
+        }
+
+        /// <summary>
+        /// Keeps the admin console client's own callback URLs in step with the configured
+        /// BaseUrl / BasePath.
+        ///
+        /// The console signs in through this same server, so its registration has to match the
+        /// redirect_uri the OIDC handler actually sends. Those URLs are seeded once at database
+        /// creation, which means a database created under a different BaseUrl — or before the
+        /// standard callbacks were seeded with BasePath at all — leaves the console unable to
+        /// sign in, failing with `invalid_request: redirect_uri does not match a registered
+        /// value`. Adding the missing entries on start-up removes a footgun that is otherwise
+        /// only fixable by hand-editing the database.
+        ///
+        /// Only the two entries this server owns are added. Anything an operator registered by
+        /// hand is left alone.
+        /// </summary>
+        private static void ReconcileAdminConsoleClient(IServiceProvider services)
+        {
+            var conf = services.GetRequiredService<IConfiguration>();
+            var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
+            if (ser == null || string.IsNullOrWhiteSpace(ser.TenantId) || string.IsNullOrWhiteSpace(ser.BaseUrl)) return;
+
+            var dbContext = services.GetRequiredService<ArkDataContext>();
+            var clientId = $"{ser.TenantId}_client";
+            var client = dbContext.clients.FirstOrDefault(c => c.tenant_id == ser.TenantId && c.client_id == clientId);
+            if (client == null) return;
+
+            var approot = Protocol.ArkOidcEndpoints.PublicRoot(ser);
+
+            var expected = new[]
+            {
+                $"{approot}/oauth/{ser.TenantId}/v1/client/{clientId}/callback",
+                $"{approot}/signin-oidc"
+            };
+            var expectedLogout = new[]
+            {
+                $"{approot}/oauth/{ser.TenantId}/v1/client/{clientId}/logoff",
+                $"{approot}/signout-callback-oidc"
+            };
+
+            var changed = false;
+
+            var redirects = client.EffectiveRedirectUris.ToList();
+            foreach (var uri in expected)
+            {
+                if (redirects.Contains(uri, StringComparer.OrdinalIgnoreCase)) continue;
+                redirects.Add(uri);
+                changed = true;
+            }
+
+            var logouts = client.EffectivePostLogoutRedirectUris.ToList();
+            foreach (var uri in expectedLogout)
+            {
+                if (logouts.Contains(uri, StringComparer.OrdinalIgnoreCase)) continue;
+                logouts.Add(uri);
+                changed = true;
+            }
+
+            if (!changed) return;
+
+            client.redirect_uris = redirects;
+            client.post_logout_redirect_uris = logouts;
+            dbContext.SaveChanges();
         }
         //all server config is taken from database
         public static void AddArkOidcServer(this IServiceCollection services, IWebHostEnvironment environment)

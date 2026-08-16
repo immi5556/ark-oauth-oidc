@@ -345,7 +345,30 @@ namespace Ark.oAuth.Oidc.Protocol
             return (requestUri, expiresAt);
         }
 
-        public async Task<Dictionary<string, string>> ConsumeParRequestAsync(string requestUri, string clientId)
+        /// <summary>
+        /// How long a started PAR request stays readable while the user signs in and consents.
+        ///
+        /// ParLifetimeSeconds bounds how long the *client* has to send the browser to /authorize
+        /// — a short window, since nothing is happening in it. Once the browser has arrived, the
+        /// request has to survive a human typing a password and reading a consent screen, which
+        /// routinely takes longer than that.
+        /// </summary>
+        private static readonly TimeSpan ParInteractiveWindow = TimeSpan.FromMinutes(15);
+
+        /// <summary>
+        /// Reads a pushed authorization request without spending it.
+        ///
+        /// The authorization endpoint re-enters with the same request_uri on every step of the
+        /// interactive round-trip: it renders the sign-in page, the browser posts back, it renders
+        /// consent, the browser posts back again. Marking the request used on the first read — as
+        /// this did — meant PAR could only ever complete for a user who already had a session and
+        /// had already consented to every scope; any first-time authorization died on the consent
+        /// post with `invalid_request_uri: request_uri has already been used`.
+        ///
+        /// Single use is still enforced, just at the point the request actually finishes: see
+        /// <see cref="MarkParConsumedAsync"/>.
+        /// </summary>
+        public async Task<Dictionary<string, string>> ReadParRequestAsync(string requestUri, string clientId)
         {
             var entry = await _ctx.par_requests.FirstOrDefaultAsync(p => p.request_uri == requestUri)
                 ?? throw new OAuthException(OAuthErrorCodes.InvalidRequestUri, "request_uri is unknown.");
@@ -356,12 +379,34 @@ namespace Ark.oAuth.Oidc.Protocol
             if (!string.Equals(entry.client_id, clientId, StringComparison.OrdinalIgnoreCase))
                 throw new OAuthException(OAuthErrorCodes.InvalidRequestUri, "request_uri belongs to a different client.");
 
-            entry.consumed = true;
-            _ctx.par_requests.Update(entry);
-            await _ctx.SaveChangesAsync();
+            // The browser is here, so switch from the client's delivery window to the user's
+            // interactive one. Guessing is unaffected — reaching this line already required
+            // knowing the URN, and the entry is still single-use.
+            var interactiveUntil = DateTime.UtcNow.Add(ParInteractiveWindow);
+            if (entry.expires_at < interactiveUntil)
+            {
+                entry.expires_at = interactiveUntil;
+                _ctx.par_requests.Update(entry);
+                await _ctx.SaveChangesAsync();
+            }
 
             return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(entry.payload)
                    ?? new Dictionary<string, string>();
+        }
+
+        /// <summary>
+        /// Spends a pushed authorization request. Called once the authorization request has
+        /// reached a terminal outcome — a code returned to the client, or an error returned in
+        /// its place — so the same request_uri cannot drive a second authorization.
+        /// </summary>
+        public async Task MarkParConsumedAsync(string requestUri)
+        {
+            if (string.IsNullOrEmpty(requestUri)) return;
+            var entry = await _ctx.par_requests.FirstOrDefaultAsync(p => p.request_uri == requestUri);
+            if (entry == null || entry.consumed) return;
+            entry.consumed = true;
+            _ctx.par_requests.Update(entry);
+            await _ctx.SaveChangesAsync();
         }
 
         // -----------------------------------------------------------------

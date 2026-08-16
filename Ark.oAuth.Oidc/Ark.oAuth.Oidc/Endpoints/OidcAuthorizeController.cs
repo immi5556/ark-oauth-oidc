@@ -77,7 +77,10 @@ namespace Ark.oAuth.Oidc.Endpoints
                     return ErrorPage(OAuthErrorCodes.RequestNotSupported, "pushed authorization requests are not enabled.", brand, tenant);
                 try
                 {
-                    var pushed = await _grants.ConsumeParRequestAsync(requestUri!, client.client_id);
+                    // Read without spending it: this handler re-enters with the same request_uri
+                    // for the sign-in and consent posts. It is marked used once the request
+                    // reaches a terminal outcome, below.
+                    var pushed = await _grants.ReadParRequestAsync(requestUri!, client.client_id);
                     // PAR parameters replace the query entirely (RFC 9126 §4)
                     pushed["client_id"] = client.client_id;
                     p = pushed;
@@ -111,7 +114,10 @@ namespace Ark.oAuth.Oidc.Endpoints
             var responseMode = p.GetValueOrDefault("response_mode");
             if (string.IsNullOrEmpty(responseMode)) responseMode = "query";
             if (responseMode is not ("query" or "fragment" or "form_post"))
+            {
+                await _grants.MarkParConsumedAsync(requestUri!);
                 return Fail(redirectUri!, "query", OAuthErrorCodes.InvalidRequest, "unsupported response_mode.", state, ep);
+            }
 
             try
             {
@@ -224,15 +230,19 @@ namespace Ark.oAuth.Oidc.Endpoints
                 _da.Log("authorize", $"{tenant.tenant_id}/oauth2/authorize",
                     $"code issued for {client.client_id}", $"sub: {session.subject}, scopes: {string.Join(" ", scopes)}");
 
+                // the request is finished, so the request_uri may not drive another one
+                await _grants.MarkParConsumedAsync(requestUri!);
                 return Respond(redirectUri!, responseMode!, response);
             }
             catch (OAuthException ex)
             {
+                await _grants.MarkParConsumedAsync(requestUri!);
                 return Fail(redirectUri!, responseMode!, ex.Error, ex.ErrorDescription, state, ep);
             }
             catch (Exception ex)
             {
                 _da.LogError(ex, "authorize", Request.Path, ex.Message);
+                await _grants.MarkParConsumedAsync(requestUri!);
                 return Fail(redirectUri!, responseMode!, OAuthErrorCodes.ServerError,
                     "the authorization server encountered an unexpected condition.", state, ep);
             }

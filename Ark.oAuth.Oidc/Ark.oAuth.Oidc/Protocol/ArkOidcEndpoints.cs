@@ -76,14 +76,7 @@ namespace Ark.oAuth.Oidc.Protocol
             string baseUrl;
             if (!string.IsNullOrWhiteSpace(config.BaseUrl))
             {
-                baseUrl = config.BaseUrl!.TrimEnd('/');
-                // BaseUrl may or may not already include BasePath; add it only when missing.
-                if (!string.IsNullOrWhiteSpace(config.BasePath))
-                {
-                    var basePath = config.BasePath!.Trim('/');
-                    if (!baseUrl.EndsWith($"/{basePath}", StringComparison.OrdinalIgnoreCase))
-                        baseUrl = $"{baseUrl}/{basePath}";
-                }
+                baseUrl = PublicRoot(config);
             }
             else
             {
@@ -93,6 +86,29 @@ namespace Ark.oAuth.Oidc.Protocol
                 else if (!string.IsNullOrWhiteSpace(config.BasePath)) baseUrl = $"{baseUrl}/{config.BasePath!.Trim('/')}";
             }
             return new ArkOidcEndpoints(baseUrl, tenantId);
+        }
+
+        /// <summary>
+        /// The externally reachable root of the application — <c>BaseUrl</c> with <c>BasePath</c>
+        /// appended when it is not already part of it.
+        ///
+        /// Everything the server hands out or registers has to be built from this one value.
+        /// Composing some URLs from BaseUrl alone and others from BaseUrl + BasePath is how the
+        /// admin console ended up registered at <c>/signin-oidc</c> while the client actually
+        /// called back to <c>/auth/signin-oidc</c>, which the authorization endpoint then rejected
+        /// as an unregistered redirect_uri.
+        /// </summary>
+        public static string PublicRoot(ArkAuthServerConfig config)
+        {
+            var baseUrl = (config.BaseUrl ?? "").TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(config.BasePath)) return baseUrl;
+
+            var basePath = config.BasePath!.Trim('/');
+            if (basePath.Length == 0) return baseUrl;
+
+            return baseUrl.EndsWith($"/{basePath}", StringComparison.OrdinalIgnoreCase)
+                ? baseUrl
+                : $"{baseUrl}/{basePath}";
         }
     }
 }

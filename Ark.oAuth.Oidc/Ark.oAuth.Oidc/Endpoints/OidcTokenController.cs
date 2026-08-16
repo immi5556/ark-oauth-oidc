@@ -21,6 +21,13 @@ namespace Ark.oAuth.Oidc.Endpoints
         private readonly ArkClaimsService _claims;
         private readonly DataAccess _da;
 
+        /// <summary>The grants this server implements — mirrors grant_types_supported in discovery.</summary>
+        private static readonly string[] SupportedGrantTypes =
+        {
+            "authorization_code", "refresh_token", "client_credentials",
+            "urn:ietf:params:oauth:grant-type:device_code"
+        };
+
         public OidcTokenController(ArkDataContext ctx, IConfiguration config, ArkClientAuthenticator clientAuth,
             ArkGrantStore grants, ArkTokenService tokens, ArkClaimsService claims, DataAccess da) : base(ctx, config)
         {
@@ -48,6 +55,14 @@ namespace Ark.oAuth.Oidc.Endpoints
                 var grantType = form["grant_type"].ToString();
                 if (string.IsNullOrWhiteSpace(grantType))
                     throw OAuthException.InvalidRequest("grant_type is required.");
+
+                // Whether the server implements the grant at all is decided before whether this
+                // client is registered for it. RFC 6749 §5.2 reserves unauthorized_client for a
+                // grant the client may not use; answering it for `password` — which this server
+                // does not implement at any client — tells a caller to fix its registration when
+                // the grant is simply gone in OAuth 2.1.
+                if (!SupportedGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
+                    throw OAuthException.UnsupportedGrantType(grantType);
 
                 if (!client.EffectiveGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
                     throw OAuthException.UnauthorizedClient($"this client is not registered for the '{grantType}' grant.");
