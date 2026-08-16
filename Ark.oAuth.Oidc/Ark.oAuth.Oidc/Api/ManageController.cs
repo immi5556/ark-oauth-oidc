@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Bogus;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ark.oAuth.Oidc
@@ -307,6 +308,40 @@ namespace Ark.oAuth.Oidc
                 {
                     error = false,
                     msg = $"onboarded client {client_id} to tenant {ten_id}"
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}"
+                };
+            }
+        }
+        [Route("onboard/user")]
+        public async Task<dynamic> OnboardUser([FromServices] Onboard onb,
+            [FromQuery] string ten_id,
+            [FromQuery] string client_id,
+            [FromQuery] string claim_keys, //"claim1, claim2"
+            [FromQuery] string user_email,
+            [FromQuery] string user_pw,
+            [FromQuery] string full_name,
+            [FromQuery] string user_type)
+        {
+            try
+            {
+                await onb.UserOnboard(ten_id,
+                    client_id,
+                    (claim_keys ?? "").Split(',').Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).ToList(),
+                    user_email,
+                    user_pw,
+                    full_name,
+                    user_type);
+                return new
+                {
+                    error = false,
+                    msg = $"onboarded user {user_email} to client_id: {client_id}."
                 };
             }
             catch (Exception ex)

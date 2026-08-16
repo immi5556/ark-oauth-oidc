@@ -27,6 +27,7 @@
 		<Content Remove="wwwroot\img\ark_idp.png" />
 		<Content Remove="wwwroot\img\ark_logo_1.png" />
 		<Content Remove="wwwroot\img\ark_oauth_logo.png" />
+		<Content Remove="wwwroot\img\ark_oidc_logo_2.png" />
 		<Content Remove="wwwroot\img\imm_c_dev_1.png" />
 		<Content Remove="wwwroot\img\oauth-bg.jpg" />
 		<Content Remove="wwwroot\img\profile.png" />
@@ -38,6 +39,8 @@
 	  <None Remove="Migration\Sqlite\down\00002_sql.sql" />
 	  <None Remove="Migration\Sqlite\up\00001_sql.sql" />
 	  <None Remove="Migration\Sqlite\up\00002_sql.sql" />
+	  <None Remove="Migration\Sqlite\down\00003_sql.sql" />
+	  <None Remove="Migration\Sqlite\up\00003_sql.sql" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -45,6 +48,8 @@
 		<EmbeddedResource Include="Migration\Sqlite\down\00002_sql.sql" />
 		<EmbeddedResource Include="Migration\Sqlite\up\00001_sql.sql" />
 		<EmbeddedResource Include="Migration\Sqlite\up\00002_sql.sql" />
+		<EmbeddedResource Include="Migration\Sqlite\up\00003_sql.sql" />
+		<EmbeddedResource Include="Migration\Sqlite\down\00003_sql.sql" />
 		<EmbeddedResource Include="wwwroot\email\user_activation_.html" />
 		<EmbeddedResource Include="wwwroot\img\profile.png" />
 	</ItemGroup>
@@ -73,5 +78,7 @@
 		<PackageReference Include="ark.net.util" Version="1.0.4.14" />
 		<PackageReference Include="Azure.Identity" Version="1.13.2" />
 		<PackageReference Include="BouncyCastle.Cryptography" Version="2.5.1" />
+		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
 	</ItemGroup>
 </Project>

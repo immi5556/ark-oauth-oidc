@@ -52,6 +52,8 @@
         public string CcList { get; set; }
         public string BccList { get; set; }
         public ArkEmailConfig EmailConfig { get; set; }
+        /// <summary>Standard OAuth 2.1 / OIDC behaviour. Optional — every value has a default.</summary>
+        public Protocol.ArkOidcOptions Oidc { get; set; } = new Protocol.ArkOidcOptions();
     }
     public class ArkEmailConfig
     {

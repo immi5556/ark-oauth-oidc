@@ -1,244 +1,499 @@
-# 🚀 Custom OAuth2 & OpenID Connect Identity Server
+# ARK Identity Server
 
-# The Order of Middleware is Veery important, to make this oauth client to work seamlessly
+A self-contained OAuth 2.1 and OpenID Connect provider for ASP.NET Core, distributed as two
+NuGet packages: `Ark.oAuth.Oidc` (the server) and `Ark.oAuth.Client` (the client).
 
-sample code preview
-
-```
-
-  using Ark.oAuth;
-  using Ark.oAuth.Oidc;
-  
-  var builder = WebApplication.CreateBuilder(args);
-  
-  builder.Services.AddArkOidcServer(builder.Environment);
-  builder.Services.AddArkOidcClient(builder.Configuration);
-  
-  // Add services to the container.
-  builder.Services.AddControllersWithViews();
-  
-  var app = builder.Build();
-  
-  // Configure the HTTP request pipeline.
-  if (!app.Environment.IsDevelopment())
-  {
-      app.UseExceptionHandler("/Home/Error");
-      // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-      app.UseHsts();
-  }
-  
-  //app.UseStaticFiles();
-  app.UseHttpsRedirection();
-  
-  app.UseRouting();
-  app.UseArkAuthData(); //server
-  app.UseArkOidcClient(); //cleint
-  app.UseAuthentication();
-  app.UseAuthorization();
-  
-  app.MapStaticAssets();
-  app.MapControllerRoute(
-      name: "default",
-      pattern: "{controller=Home}/{action=Index}/{id?}")
-      .WithStaticAssets();
-  
-  
-  app.Run();
-
-
-```
-
-
-Welcome to the official documentation for the **ARK Identity Server**, a lightweight OAuth 2.0 and OpenID Connect (OIDC) compliant authorization server designed for secure authentication and token issuance.
-
-This project provides the core components required for building secure authentication flows for web, mobile, and desktop applications.
+It is multi-tenant, runs on SQLite / MySQL / PostgreSQL / SQL Server, and ships its own sign-in,
+consent and admin UI. Point any standard OpenID Connect library at the issuer URL and it will
+configure itself.
 
 ---
 
-## 🌐 OIDC Discovery Endpoint
+## Contents
 
-All configuration and metadata for this identity server is exposed via the **Well-Known Configuration URL**:
-
-```
-https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/.well-known/ark_server_client/openid-configuration
-```
-
-You can use this to dynamically configure any compatible OIDC client (e.g., OpenID libraries, Postman, or OAuth2-aware tools).
-
----
-
-## 📦 Features
-
-- OAuth2 Authorization Code Flow with PKCE
-- OpenID Connect (OIDC) Core support
-- Token endpoint with JWT access tokens
-- Refresh token support
-- Dynamic metadata via discovery endpoint
-- Configurable client and scope management
-- Extensible authentication and user management
+- [What's supported](#whats-supported)
+- [Quick start](#quick-start)
+- [Integrating an application](#integrating-an-application)
+- [The client package](#the-client-package)
+- [Endpoints](#endpoints)
+- [Flows](#flows)
+- [Configuration reference](#configuration-reference)
+- [Registering clients](#registering-clients)
+- [Key management](#key-management)
+- [Upgrading from the v1 endpoints](#upgrading-from-the-v1-endpoints)
+- [Security notes](#security-notes)
 
 ---
 
-## ⚙️ Getting Started
+## What's supported
 
-### 1. Clone the Repository
+| Specification | Status |
+|---|---|
+| OAuth 2.0 Authorization Framework (RFC 6749) | Authorization code, refresh token, client credentials |
+| PKCE (RFC 7636) | **Required** for public clients, `S256` only |
+| OpenID Connect Core 1.0 | ID tokens, UserInfo, `nonce`, `at_hash`/`c_hash`, `auth_time`, `sid` |
+| OpenID Connect Discovery 1.0 | `/.well-known/openid-configuration` |
+| OAuth 2.0 Authorization Server Metadata (RFC 8414) | `/.well-known/oauth-authorization-server` |
+| JSON Web Key Set (RFC 7517) | `/.well-known/jwks.json`, with two-phase key rotation |
+| JWT Profile for Access Tokens (RFC 9068) | `typ: at+jwt`, `client_id`, `jti`, `scope` |
+| Token Introspection (RFC 7662) | Access and refresh tokens |
+| Token Revocation (RFC 7009) | Revokes the whole refresh-token family |
+| Device Authorization Grant (RFC 8628) | With `verification_uri_complete` |
+| Pushed Authorization Requests (RFC 9126) | Optional, can be made mandatory |
+| Dynamic Client Registration (RFC 7591/7592) | Optional, off by default |
+| RP-Initiated Logout 1.0 | `end_session_endpoint` |
+| Authorization Server Issuer Identification (RFC 9207) | `iss` in the authorization response |
+| Native Apps (RFC 8252) | Loopback redirect URIs with variable ports |
+
+Deliberately **not** supported: the implicit grant, the hybrid flow, and the resource owner
+password credentials grant. All three are removed in OAuth 2.1.
+
+---
+
+## Quick start
+
+### 1. Create a host project
 
 ```bash
-git clone https://your-git-url/ark-identity-server.git
-cd ark-identity-server
+dotnet new mvc -n MyIdp
+cd MyIdp
+dotnet add package Ark.oAuth.Oidc
+dotnet add package Ark.oAuth.Client
 ```
 
-### 2. Build and Run
+### 2. `Program.cs`
 
-Ensure you have [.NET 6 or later](https://dotnet.microsoft.com/en-us/download) installed.
+```csharp
+using Ark.oAuth;
+using Ark.oAuth.Oidc;
 
-```bash
-dotnet restore
-dotnet build
-dotnet run
-```
+var builder = WebApplication.CreateBuilder(args);
 
-The Identity Server will be available at:
+builder.Services.AddArkOidcServer(builder.Environment);   // the identity provider
+builder.Services.AddArkOidcClient(builder.Configuration); // the admin console is itself a client
+builder.Services.AddControllersWithViews();
 
-```
-https://localhost:5001/
-```
+var app = builder.Build();
 
----
-
-## 🛠️ Configuration
-
-### 🔑 Registering a Client
-
-To integrate a client with this server, you must register it in the configuration:
-
-```json
+if (!app.Environment.IsDevelopment())
 {
-  "client_id": "my-client-id",
-  "client_secret": "my-client-secret",
-  "redirect_uris": ["https://myapp.com/signin-oidc"],
-  "grant_types": ["authorization_code"],
-  "scope": ["openid", "profile", "email"]
+    app.UseExceptionHandler("/Home/Error");
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+
+app.UseRouting();        // must come before UseAuthentication / UseAuthorization
+app.UseArkAuthData();    // one-time database bootstrap
+app.UseArkOidcClient();
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
+app.Run();
+```
+
+> **Middleware order matters.** `UseRouting()` has to run before `UseAuthentication()` and
+> `UseAuthorization()`. Without a selected endpoint, the authorization middleware cannot see the
+> `[Authorize]` metadata it is supposed to enforce.
+
+### 3. `appsettings.json`
+
+```jsonc
+{
+  "ark_oauth_server": {
+    "TenantId": "my_idp",              // a client named "<TenantId>_client" is created for the admin console
+    "BasePath": "",                    // set if the app is hosted under a sub-path
+    "BaseUrl": "https://idp.example.com",
+    "Provider": "sqlite",              // sqlite (default) | mysql | postgres | sqlserver
+    "EnableLogTrace": true,
+    "UploadPath": "./wwwroot/{0}/",
+    "DefaultPw": "<initial password for new users>",
+    "EmailConfig": {
+      "email": "idp@example.com",
+      "pw": "<smtp password>",
+      "from": "idp@example.com",
+      "display": "Example (IdP)",
+      "subject": "Example IdP: ",
+      "smtp": "smtp.example.com",
+      "port": 25,
+      "host_logo": "https://idp.example.com/img/logo.png",
+      "activation_link": "https://idp.example.com/oauth/{0}/v1/password/reset/{1}",
+      "host_company_display": "Example Identity Provider",
+      "privacy_policy_url": "https://example.com/privacy",
+      "terms_url": "https://example.com/terms"
+    }
+  },
+  "ConnectionStrings": {
+    "ArkAuthConnection": "Data Source=./data/ark_auth.db"
+  }
 }
 ```
 
-> This can be done via a configuration file, database, or an admin API (depending on your implementation).
+### 4. Run
 
----
-
-## 🔐 Authentication Flow (Authorization Code + PKCE)
-
-### 1. Authorize Endpoint
-
-```
-GET https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/authorize
+```bash
+mkdir -p data && dotnet run
 ```
 
-#### Parameters:
+On first run the server creates its schema, generates an RSA signing key **locally**, seeds the
+OIDC scope catalogue, and creates an `admin` / `admin` account. **Change that password before
+exposing the server.**
 
-| Name            | Description                              |
-|-----------------|------------------------------------------|
-| `client_id`     | Your registered client ID                |
-| `response_type` | `code`                                   |
-| `redirect_uri`  | Must match the registered redirect URI   |
-| `scope`         | e.g., `openid profile email`             |
-| `state`         | Random state to validate callback        |
-| `code_challenge`| PKCE challenge (Base64-encoded SHA256)   |
-| `code_challenge_method` | Usually `S256`                   |
-
----
-
-### 2. Token Endpoint
+Your issuer is now:
 
 ```
-POST https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/token
+https://idp.example.com/my_idp
 ```
 
-#### Parameters:
-
-| Name             | Description                          |
-|------------------|--------------------------------------|
-| `grant_type`     | `authorization_code`                 |
-| `code`           | The code received from authorization |
-| `redirect_uri`   | Must match the original redirect URI |
-| `client_id`      | Registered client ID                 |
-| `client_secret`  | (if applicable)                      |
-| `code_verifier`  | Original PKCE verifier string        |
-
----
-
-### 3. UserInfo Endpoint
+and the discovery document is at:
 
 ```
-GET https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/userinfo
+https://idp.example.com/my_idp/.well-known/openid-configuration
 ```
 
-Use the access token in the `Authorization: Bearer` header.
-
 ---
 
-### 4. Logout Endpoint
+## Integrating an application
+
+There is one URL to know — the **issuer**. Everything else is discovered.
+
+Signed in to the admin console, each client has a generated setup page at:
 
 ```
-GET https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/logout
+/{tenant_id}/oauth2/integrate/{client_id}
 ```
 
-Parameters:
-
-- `id_token_hint`: (optional) previously issued ID Token
-- `post_logout_redirect_uri`: where to redirect after logout
-
----
-
-## 🔍 Useful Endpoints Summary
-
-| Purpose         | URL                                                                 |
-|----------------|----------------------------------------------------------------------|
-| Discovery       | `/.well-known/ark_server_client/openid-configuration`              |
-| Authorize       | `/authorize`                                                        |
-| Token           | `/token`                                                            |
-| UserInfo        | `/userinfo`                                                         |
-| Logout          | `/logout`                                                           |
-| JWKS            | `/jwks` (if supported for public key validation)                   |
+It renders the exact values and copy-paste config for that client: issuer, client ID, scopes,
+redirect URIs, and working snippets for the Ark client package, the raw ASP.NET Core handler,
+`oidc-client-ts`, Authlib and `go-oidc`. Because it is generated from the client's own
+registration, it cannot drift out of date.
 
 ---
 
-## 🧪 Testing with Postman
+## The client package
 
-1. Go to **Authorization > OAuth 2.0**
-2. Fill in the following:
-   - Auth URL: `https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/authorize`
-   - Token URL: `https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/token`
-   - Client ID & Secret
-   - Scope: `openid profile`
-   - Callback URL: `https://oauth.pstmn.io/v1/callback`
+`Ark.oAuth.Client` configures ASP.NET Core's own OpenID Connect and cookie handlers. It is not a
+hand-rolled protocol implementation, so PKCE, `state`, `nonce`, JWKS rollover and token refresh
+are handled by the framework.
 
-3. Click **Get New Access Token**.
+```csharp
+builder.Services.AddArkOidcClient(builder.Configuration);
+```
+
+```jsonc
+{
+  "ark_oauth_client": {
+    "Authority": "https://idp.example.com/my_idp",
+    "ClientId": "my-app",
+    "ClientSecret": null,                 // omit for public clients (SPA, native, browser apps)
+    "Scopes": ["openid", "profile", "email", "offline_access"],
+    "CallbackPath": "/signin-oidc",
+    "SignedOutCallbackPath": "/signout-callback-oidc",
+    "RequireHttpsMetadata": true
+  }
+}
+```
+
+Then use `[Authorize]` as normal. Reading tokens:
+
+```csharp
+var accessToken = await HttpContext.GetArkAccessTokenAsync();
+
+// or attach it to a downstream call
+var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/things");
+await request.WithArkTokenAsync(HttpContext);
+```
+
+Ark authorization claims (`ark_claims` in the access token) are projected onto the principal as
+role claims, so they work with policies directly:
+
+```csharp
+[Authorize(Roles = "billing.admin")]
+public IActionResult Billing() => View();
+```
+
+### Protecting an API
+
+```csharp
+builder.Services
+    .AddAuthentication()
+    .AddArkOidcApi(arkConfig);
+```
+
+### Talking to a different provider
+
+Because this is the standard handler, changing `Authority` and `ClientId` is enough to point the
+same application at Entra ID, Okta, Auth0 or Keycloak.
 
 ---
 
-## 👨‍💻 For Developers
+## Endpoints
 
-- All core logic (e.g., token issuance, authorization, user handling) is written in C# using ASP.NET Core.
-- Authentication is modular — you can plug in your own user store (e.g., database, LDAP).
-- JWT tokens are signed using an RSA key pair; keys can be rotated and exposed via the JWKS endpoint.
+All paths are relative to the issuer, `{BaseUrl}/{TenantId}`.
+
+| Purpose | Path |
+|---|---|
+| Discovery | `/.well-known/openid-configuration` |
+| Discovery (RFC 8414 name) | `/.well-known/oauth-authorization-server` |
+| JWKS | `/.well-known/jwks.json` |
+| Authorization | `/oauth2/authorize` |
+| Token | `/oauth2/token` |
+| UserInfo | `/oauth2/userinfo` |
+| Introspection | `/oauth2/introspect` |
+| Revocation | `/oauth2/revoke` |
+| End session | `/oauth2/logout` |
+| Device authorization | `/oauth2/device_authorization` |
+| Device verification (user-facing) | `/oauth2/device` |
+| Pushed authorization request | `/oauth2/par` |
+| Dynamic registration | `/oauth2/register` |
+| Client setup page | `/oauth2/integrate/{client_id}` |
 
 ---
 
-## 🧰 Libraries and Tools
+## Flows
 
-- [.NET 6](https://dotnet.microsoft.com/en-us/)
-- [Microsoft.AspNetCore.Authentication](https://docs.microsoft.com/en-us/aspnet/core/security/authentication/)
-- [System.IdentityModel.Tokens.Jwt](https://www.nuget.org/packages/System.IdentityModel.Tokens.Jwt)
+### Authorization code + PKCE
+
+The default for web, SPA and native applications.
+
+```
+GET /{tenant}/oauth2/authorize
+      ?response_type=code
+      &client_id=my-app
+      &redirect_uri=https://app.example.com/signin-oidc
+      &scope=openid%20profile%20email%20offline_access
+      &state=<random>
+      &nonce=<random>
+      &code_challenge=<BASE64URL(SHA256(verifier))>
+      &code_challenge_method=S256
+```
+
+```
+POST /{tenant}/oauth2/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&code=<code>
+&redirect_uri=https://app.example.com/signin-oidc
+&client_id=my-app
+&code_verifier=<verifier>
+```
+
+```json
+{
+  "access_token": "eyJ…",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "refresh_token": "…",
+  "id_token": "eyJ…",
+  "scope": "openid profile email offline_access"
+}
+```
+
+A `refresh_token` is issued only when `offline_access` is granted.
+
+### Refresh token
+
+Rotation is on by default: each refresh returns a new refresh token and retires the old one.
+Presenting an already-used token is treated as theft and **revokes the entire token family**.
+
+```
+grant_type=refresh_token&refresh_token=<token>&client_id=my-app
+```
+
+Scope may be narrowed on refresh, never widened.
+
+### Client credentials
+
+For service-to-service calls. Requires client authentication — a public client cannot use it.
+
+```bash
+curl -X POST https://idp.example.com/my_idp/oauth2/token \
+  -u 'my-service:<secret>' \
+  -d 'grant_type=client_credentials' \
+  -d 'scope=reports.read'
+```
+
+### Device authorization grant
+
+For TVs, CLIs and other input-constrained devices.
+
+```bash
+curl -X POST https://idp.example.com/my_idp/oauth2/device_authorization \
+  -u 'my-device:<secret>' -d 'scope=openid profile'
+```
+
+```json
+{
+  "device_code": "…",
+  "user_code": "WDJB-MJHT",
+  "verification_uri": "https://idp.example.com/my_idp/oauth2/device",
+  "verification_uri_complete": "https://idp.example.com/my_idp/oauth2/device?user_code=WDJB-MJHT",
+  "expires_in": 600,
+  "interval": 5
+}
+```
+
+The device then polls the token endpoint with
+`grant_type=urn:ietf:params:oauth:grant-type:device_code`, receiving `authorization_pending`
+until the user approves, and `slow_down` if it polls faster than `interval`.
+
+### Pushed authorization requests
+
+Submit the authorization parameters over the back channel first:
+
+```bash
+curl -X POST https://idp.example.com/my_idp/oauth2/par \
+  -u 'my-app:<secret>' \
+  -d 'response_type=code' -d 'redirect_uri=https://app.example.com/cb' \
+  -d 'scope=openid' -d 'code_challenge=<challenge>' -d 'code_challenge_method=S256'
+```
+
+Then send the browser to `/oauth2/authorize?client_id=my-app&request_uri=<request_uri>`.
+
+Set `Oidc:RequirePushedAuthorizationRequests` to reject plain authorization requests entirely.
 
 ---
 
-## 📝 License
+## Configuration reference
 
-This project is licensed under the MIT License.
+Everything below sits under `ark_oauth_server:Oidc` and is optional; defaults are shown.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `EnableDeviceFlow` | `true` | Serve the device authorization grant |
+| `EnablePushedAuthorizationRequests` | `true` | Serve `/oauth2/par` |
+| `RequirePushedAuthorizationRequests` | `false` | Refuse authorization requests that did not arrive via PAR |
+| `EnableDynamicRegistration` | `false` | Serve `/oauth2/register` — it lets callers create clients |
+| `RequireRegistrationAccessToken` | `true` | Require an initial access token to register |
+| `AlwaysRequireConsent` | `false` | Show the consent screen even for first-party clients |
+| `SessionLifetimeMinutes` | `480` | IdP session lifetime |
+| `MaxFailedSignIns` | `10` | Consecutive failures before lockout; `0` disables |
+| `LockoutMinutes` | `15` | Lockout duration |
+| `DeviceCodeLifetimeSeconds` | `600` | Device code validity |
+| `DevicePollIntervalSeconds` | `5` | Minimum device polling interval |
+| `ParLifetimeSeconds` | `90` | `request_uri` validity |
+
+Per-client settings live on the client record: `access_token_lifetime_seconds`,
+`id_token_lifetime_seconds`, `refresh_token_lifetime_seconds`,
+`authorization_code_lifetime_seconds`, `require_pkce`, `require_par`, `require_consent`,
+`refresh_token_rotation`, `token_endpoint_auth_method` and `is_active`.
 
 ---
 
-## 📫 Need Help?
+## Registering clients
 
-If you're stuck or need help integrating your application with ARK Identity Server, please open an issue or contact the development team.
+Through the admin console at `/oauth/{tenant}/v1/server/{tenant}_client/manage`, or with dynamic
+registration when it is enabled:
+
+```bash
+curl -X POST https://idp.example.com/my_idp/oauth2/register \
+  -H 'Authorization: Bearer <initial access token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "client_name": "My Service",
+        "grant_types": ["client_credentials"],
+        "token_endpoint_auth_method": "client_secret_basic",
+        "scope": "reports.read"
+      }'
+```
+
+The response carries the `client_secret` **once** — it is stored only as a PBKDF2 hash and
+cannot be retrieved later. It also returns a `registration_access_token` for reading or deleting
+the registration through `/oauth2/register/{client_id}` (RFC 7592).
+
+Redirect URIs are validated at registration: they must be absolute, carry no fragment, and use
+`https` unless they are loopback addresses.
+
+Supported `token_endpoint_auth_method` values: `client_secret_basic`, `client_secret_post`,
+`private_key_jwt`, `none`.
+
+---
+
+## Key management
+
+Each tenant has a signing key published at `/.well-known/jwks.json`. Rotation is two-phase, so it
+never invalidates tokens still in flight:
+
+1. The new key becomes `active` and starts signing.
+2. The previous key moves to `rollover` and stays published, so clients that cached JWKS keep
+   validating tokens signed with it.
+3. Once the longest-lived token signed by the old key has expired, retire it.
+
+Keys are generated in-process. Nothing is fetched from an external key service.
+
+---
+
+## Upgrading from the v1 endpoints
+
+The original `/oauth/{tenant}/v1/…` routes still work and keep their original request and
+response shapes. What changed underneath is that they now delegate to the standard protocol
+core, so codes issued there are single-use, expire, and **have their PKCE verifier checked** —
+that check did not previously exist.
+
+For existing databases, run migration `00003`:
+
+```
+GET /api/migration/v1/sql?action=up&name=00003_sql.sql
+```
+
+It adds the protocol state tables and the RFC 7591 metadata columns, seeds the scope catalogue,
+and adopts each tenant's existing RSA key as its active signing key with `kid = tenant_id`, so
+tokens already issued keep validating.
+
+To migrate an application:
+
+| v1 | Standard |
+|---|---|
+| Paste `rsaPublic` into config | Discovered from `jwks_uri` |
+| `authServerUrl` + `tenantId` | `Authority` (the two joined) |
+| `/oauth/{t}/v1/connect/authorize` | `/{t}/oauth2/authorize` |
+| `/oauth/{t}/v1/token` | `/{t}/oauth2/token` |
+| `/oauth/{t}/v1/.well-known/{c}/openid-configuration` | `/{t}/.well-known/openid-configuration` |
+| Custom `redirect_relative` handling | Standard `CallbackPath` |
+
+Set `ark_oauth_client:UseLegacyFlow` to `true` to keep the old client middleware during the
+transition. It does not validate `state` or `nonce`; treat it as a migration aid.
+
+---
+
+## Security notes
+
+Behaviour worth knowing about when operating this server:
+
+- **PKCE is enforced.** A public client must send `code_challenge`, and the verifier is checked
+  against it at the token endpoint. The `plain` method is not accepted.
+- **Codes and refresh tokens are stored as SHA-256 hashes.** Read access to the database does not
+  yield redeemable credentials.
+- **Replay is treated as compromise.** Reusing an authorization code revokes the tokens derived
+  from that session; reusing a refresh token revokes its whole family.
+- **Redirect URIs are matched exactly.** No wildcards or prefix matching. The one exception is
+  the port of a loopback address, for native apps (RFC 8252 §7.3).
+- **Errors before `redirect_uri` is validated render as a page**, never as a redirect — otherwise
+  the authorization endpoint would be an open redirect.
+- **The introspection endpoint requires client authentication**, so it cannot be used as an
+  oracle to test captured tokens.
+- **Client authentication failures are constant-time**, and an unknown `client_id` costs the same
+  as a bad secret.
+- **Sign-in failures return a single message** regardless of cause, so the login form cannot be
+  used to enumerate accounts. Repeated failures trigger lockout.
+- **The sign-in and consent pages load no third-party resources.** Their CSS is inlined, so they
+  work offline and under a strict Content-Security-Policy. The only external requests are the
+  logo and policy URLs you configure yourself.
+
+Before going to production:
+
+1. Change the `admin` / `admin` password.
+2. Set a strong `DefaultPw`.
+3. Keep `RequireHttpsMetadata` at `true`.
+4. Leave `EnableDynamicRegistration` off unless you need it, and keep
+   `RequireRegistrationAccessToken` on if you do.
+5. Give confidential clients real secrets and set `token_endpoint_auth_method` accordingly.
+
+---
+
+## License
+
+MIT.

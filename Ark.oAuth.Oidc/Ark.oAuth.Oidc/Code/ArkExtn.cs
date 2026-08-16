@@ -81,10 +81,20 @@ namespace Ark.oAuth.Oidc
     }
     public static class ArkExtn
     {
+        // Database initialisation only ever needs to happen once per process. Previously this
+        // ran on every single request — opening a scope, querying pending migrations and
+        // probing the connection before the real work could start.
+        private static int _dataInitialized;
+
         public static void UseArkAuthData(this IApplicationBuilder builder)
         {
             builder.Use(async (context, next) =>
             {
+                if (Interlocked.CompareExchange(ref _dataInitialized, 1, 0) != 0)
+                {
+                    await next();
+                    return;
+                }
                 using (var scope = builder.ApplicationServices.CreateScope())
                 {
                     try
@@ -101,7 +111,10 @@ namespace Ark.oAuth.Oidc
                             var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
                             var htp = scope.ServiceProvider.GetService<IHttpContextAccessor>();
                             var util = scope.ServiceProvider.GetRequiredService<ArkUtil>();
-                            dynamic dd = util.GetKeys().Result;
+                            // Signing keys are generated here, in this process. They used to be
+                            // fetched from an external HTTPS service, which put the tenant's
+                            // private key on the wire and on someone else's machine.
+                            var (publicKey, privateKey) = Protocol.ArkCrypto.GenerateRsaKeyPair();
                             var baseurl = !string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}";
                             var domain = new Uri(baseurl).Host;
                             //1st time -> create client for server to manage users
@@ -113,11 +126,26 @@ namespace Ark.oAuth.Oidc
                                 audience = $"{baseurl}/ark/oauth/v1/aud",
                                 issuer = $"{baseurl}/ark/oauth/v1/iss",
                                 expire_mins = 480,
-                                rsa_private = dd.private_key,
-                                rsa_public = dd.public_key,
+                                rsa_private = privateKey,
+                                rsa_public = publicKey,
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                             };
                             dbContext.tenants.Add(tt);
+                            dbContext.signing_keys.Add(new ArkSigningKey()
+                            {
+                                // kid == tenant_id keeps tokens verifiable by clients that were
+                                // configured against the pre-JWKS key layout
+                                kid = ser.TenantId,
+                                tenant_id = ser.TenantId,
+                                alg = "RS256",
+                                usage = "sig",
+                                public_key = publicKey,
+                                private_key = privateKey,
+                                status = "active",
+                                created_at = DateTime.UtcNow
+                            });
+                            foreach (var sc in Protocol.ArkClaimsService.DefaultScopes())
+                                dbContext.scopes.Add(sc);
                             var cll = new ArkClient()
                             {
                                 tenant_id = ser.TenantId,
@@ -131,7 +159,31 @@ namespace Ark.oAuth.Oidc
                                 redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
                                 //redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{{0}}/callback",
                                 logout_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
-                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
+                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+
+                                // standard registration metadata for the admin console client.
+                                // It runs in a browser, so it is public and must use PKCE.
+                                client_name = $"{ser.TenantId} Admin Console",
+                                application_type = "web",
+                                token_endpoint_auth_method = "none",
+                                require_pkce = true,
+                                refresh_token_rotation = true,
+                                is_active = true,
+                                grant_types = new List<string>() { "authorization_code", "refresh_token" },
+                                response_types = new List<string>() { "code" },
+                                scopes = new List<string>() { "openid", "profile", "email", "offline_access" },
+                                redirect_uris = new List<string>()
+                                {
+                                    // the v1 callback, kept so existing deployments keep working
+                                    $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
+                                    // the standard callback used by the ASP.NET Core OIDC handler
+                                    $"{baseurl}/signin-oidc"
+                                },
+                                post_logout_redirect_uris = new List<string>()
+                                {
+                                    $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
+                                    $"{baseurl}/signout-callback-oidc"
+                                }
                             };
                             dbContext.clients.Add(cll);
                             var lls = new List<string>()
@@ -220,6 +272,19 @@ namespace Ark.oAuth.Oidc
             services.AddScoped<TokenServer>();
             services.AddSingleton<ArkUtil>();
             services.AddScoped<Onboard>();
+
+            // standard OAuth 2.1 / OIDC protocol services
+            services.AddMemoryCache();
+            services.AddHttpClient("ark-oidc", c => c.Timeout = TimeSpan.FromSeconds(10));
+            services.AddScoped<Protocol.ArkKeyService>();
+            services.AddScoped<Protocol.ArkClaimsService>();
+            services.AddScoped<Protocol.ArkTokenService>();
+            services.AddScoped<Protocol.ArkGrantStore>();
+            services.AddScoped<Protocol.ArkClientAuthenticator>();
+
+            // the interactive endpoints render Razor views shipped inside this package
+            services.AddControllersWithViews();
+            services.AddAntiforgery(o => o.Cookie.Name = "ark_idp_csrf");
         }
     }
     public static class ExtnUtil

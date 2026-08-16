@@ -1,0 +1,184 @@
+@model Ark.oAuth.Oidc.Endpoints.IntegrationPageModel
+@{
+    Layout = "~/Views/Oidc/_ArkLayout.cshtml";
+    ViewBag.Brand = Model.Brand;
+    ViewBag.PageTitle = $"Set up {Model.Client.client_id}";
+    ViewBag.CardClass = "ark-card--doc";
+
+    var c = Model.Client;
+    var ep = Model.Endpoints;
+    var isPublic = c.IsPublicClient;
+    var redirects = c.EffectiveRedirectUris;
+    var scopes = string.Join(" ", c.EffectiveScopes);
+}
+
+<style>
+    .ark-card--doc { max-width: 860px; text-align: left; }
+    .ark-card--doc h1 { text-align: left; }
+    .ark-doc-sub { color: var(--ark-fg-muted); margin: 0 0 26px; font-size: 14px; }
+    .ark-sec { margin-top: 30px; }
+    .ark-sec h2 {
+        font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em;
+        color: var(--ark-fg-muted); margin: 0 0 10px;
+    }
+    .ark-kv { display: grid; grid-template-columns: minmax(140px, auto) 1fr; gap: 1px; border: 1px solid var(--ark-border); border-radius: var(--ark-radius-sm); overflow: hidden; background: var(--ark-border); }
+    .ark-kv > div { background: var(--ark-surface); padding: 9px 12px; font-size: 13.5px; }
+    .ark-kv > div:nth-child(odd) { background: var(--ark-surface-2); font-weight: 560; }
+    .ark-kv code { background: none; border: none; padding: 0; word-break: break-all; }
+    pre {
+        margin: 0; padding: 14px; overflow-x: auto;
+        background: var(--ark-surface-2); border: 1px solid var(--ark-border);
+        border-radius: var(--ark-radius-sm);
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 12.5px; line-height: 1.6;
+    }
+    .ark-note {
+        border-left: 3px solid var(--ark-accent); background: var(--ark-accent-soft);
+        padding: 11px 14px; border-radius: 0 var(--ark-radius-sm) var(--ark-radius-sm) 0;
+        font-size: 13.5px; margin-top: 12px;
+    }
+    .ark-pill {
+        display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11.5px;
+        font-weight: 600; background: var(--ark-accent-soft); color: var(--ark-accent);
+        border: 1px solid color-mix(in srgb, var(--ark-accent) 30%, transparent);
+    }
+</style>
+
+<h1>Set up @(!string.IsNullOrWhiteSpace(c.client_name) ? c.client_name : c.client_id)</h1>
+<p class="ark-doc-sub">
+    Everything below is generated from this client's registration.
+    <span class="ark-pill">@(isPublic ? "public client" : "confidential client")</span>
+</p>
+
+<div class="ark-sec">
+    <h2>Start here — the only URL you need</h2>
+    <pre>@ep.Discovery</pre>
+    <div class="ark-note">
+        Point any OpenID Connect library at the <strong>issuer</strong> below and it will fetch this
+        document and configure every endpoint, signing key and supported feature by itself.
+        There is no need to copy public keys or endpoint URLs by hand.
+    </div>
+</div>
+
+<div class="ark-sec">
+    <h2>Core values</h2>
+    <div class="ark-kv">
+        <div>Issuer / Authority</div><div><code>@ep.Issuer</code></div>
+        <div>Client ID</div><div><code>@c.client_id</code></div>
+        <div>Client authentication</div><div><code>@c.token_endpoint_auth_method</code></div>
+        <div>Scopes</div><div><code>@scopes</code></div>
+        <div>Redirect URIs</div>
+        <div>
+            @foreach (var uri in redirects)
+            {
+                <code>@uri</code><br />
+            }
+        </div>
+        <div>PKCE</div><div><code>@(c.require_pkce ? "required (S256)" : "optional")</code></div>
+    </div>
+</div>
+
+<div class="ark-sec">
+    <h2>ASP.NET Core — using the Ark client package</h2>
+    <pre>// Program.cs
+builder.Services.AddArkOidcClient(builder.Configuration);
+
+app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// appsettings.json
+"ark_oauth_client": {
+  "Authority": "@ep.Issuer",
+  "ClientId": "@c.client_id",@(isPublic ? "" : "\n  \"ClientSecret\": \"<your client secret>\",")
+  "Scopes": [@Html.Raw(string.Join(", ", c.EffectiveScopes.Select(s => $"\"{s}\"")))],
+  "CallbackPath": "/signin-oidc",
+  "SignedOutCallbackPath": "/signout-callback-oidc"
+}</pre>
+</div>
+
+<div class="ark-sec">
+    <h2>ASP.NET Core — using the built-in handler directly</h2>
+    <pre>builder.Services
+    .AddAuthentication(o =&gt; {
+        o.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        o.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+    })
+    .AddCookie()
+    .AddOpenIdConnect(o =&gt; {
+        o.Authority = "@ep.Issuer";
+        o.ClientId  = "@c.client_id";@(isPublic ? "" : "\n        o.ClientSecret = \"<your client secret>\";")
+        o.ResponseType = "code";
+        o.UsePkce = true;
+        o.SaveTokens = true;
+        o.GetClaimsFromUserInfoEndpoint = true;
+        o.MapInboundClaims = false;
+@Html.Raw(string.Join("\n", c.EffectiveScopes.Select(s => $"        o.Scope.Add(\"{s}\");")))
+    });</pre>
+</div>
+
+<div class="ark-sec">
+    <h2>Any other language</h2>
+    <p class="ark-doc-sub" style="margin-bottom:10px;">
+        These libraries all take the issuer and discover the rest:
+    </p>
+    <pre>// JavaScript / TypeScript  (oidc-client-ts)
+new UserManager({
+  authority: "@ep.Issuer",
+  client_id: "@c.client_id",
+  redirect_uri: "@(redirects.FirstOrDefault() ?? "https://your-app/callback")",
+  scope: "@scopes",
+  response_type: "code"
+});
+
+# Python  (authlib)
+oauth.register(
+    name="ark",
+    server_metadata_url="@ep.Discovery",
+    client_id="@c.client_id",
+    client_kwargs={"scope": "@scopes"},
+)
+
+// Go  (coreos/go-oidc)
+provider, _ := oidc.NewProvider(ctx, "@ep.Issuer")</pre>
+</div>
+
+<div class="ark-sec">
+    <h2>Try it from the command line</h2>
+    <pre>curl -s @ep.Discovery | jq .
+curl -s @ep.Jwks | jq .
+@if (!isPublic)
+{
+    @Html.Raw($@"
+# client_credentials, for service-to-service calls
+curl -s -X POST {ep.Token} \
+  -u '{c.client_id}:&lt;client secret&gt;' \
+  -d 'grant_type=client_credentials' \
+  -d 'scope={scopes.Replace("openid ", "").Replace(" offline_access", "")}'")
+}</pre>
+</div>
+
+<div class="ark-sec">
+    <h2>Endpoints</h2>
+    <div class="ark-kv">
+        <div>Authorization</div><div><code>@ep.Authorization</code></div>
+        <div>Token</div><div><code>@ep.Token</code></div>
+        <div>UserInfo</div><div><code>@ep.UserInfo</code></div>
+        <div>JWKS</div><div><code>@ep.Jwks</code></div>
+        <div>Introspection</div><div><code>@ep.Introspection</code></div>
+        <div>Revocation</div><div><code>@ep.Revocation</code></div>
+        <div>End session</div><div><code>@ep.EndSession</code></div>
+        @if (Model.DeviceFlowEnabled)
+        {
+            <div>Device authorization</div><div><code>@ep.DeviceAuthorization</code></div>
+        }
+        @if (Model.ParEnabled)
+        {
+            <div>Pushed authorization</div><div><code>@ep.PushedAuthorizationRequest</code></div>
+        }
+    </div>
+</div>
+
+<p class="ark-meta">
+    Grants enabled for this client: <code>@string.Join("</code> <code>", c.EffectiveGrantTypes)</code>
+</p>

@@ -2,27 +2,38 @@ using Ark.oAuth;
 using Ark.oAuth.Oidc;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// The identity provider itself.
 builder.Services.AddArkOidcServer(builder.Environment);
+
+// The IdP's own admin console signs in through the IdP, so it is also a client.
 builder.Services.AddArkOidcClient(builder.Configuration);
-// Add services to the container.
+
 builder.Services.AddControllersWithViews();
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+
 app.UsePathBase("/auth");
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-app.UseArkAuthData(); //server
-app.UseArkOidcClient(); //cleint
-app.UseAuthentication();
+
+// Middleware order matters here.
+//
+// UseRouting has to run before UseAuthentication/UseAuthorization: without a selected endpoint,
+// the authorization middleware cannot see the [Authorize] metadata it is meant to enforce.
+// (This ran in the opposite order previously.)
 app.UseRouting();
+app.UseArkAuthData();   // one-time database bootstrap
+app.UseArkOidcClient(); // no-op unless ark_oauth_client:UseLegacyFlow is set
+app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
