@@ -25,9 +25,21 @@ namespace Ark.oAuth.Oidc
         {
             if (string.IsNullOrEmpty(tenant.rsa_private))
             {
-                dynamic dd = await util.GetKeys();
-                tenant.rsa_private = dd.private_key;
-                tenant.rsa_public = dd.public_key;
+                // An edit that does not carry the key back must not rotate it. Regenerating here
+                // silently invalidates every token and JWKS entry already issued for the tenant,
+                // so the stored pair is preserved and a new one is only minted for a new tenant.
+                var existing = await da.GetTenant(tenant.tenant_id);
+                if (existing != null && !string.IsNullOrEmpty(existing.rsa_private))
+                {
+                    tenant.rsa_private = existing.rsa_private;
+                    tenant.rsa_public = existing.rsa_public;
+                }
+                else
+                {
+                    dynamic dd = await util.GetKeys();
+                    tenant.rsa_private = dd.private_key;
+                    tenant.rsa_public = dd.public_key;
+                }
             }
             await da.UpsertTenant(tenant);
             return new
@@ -99,6 +111,48 @@ namespace Ark.oAuth.Oidc
                 };
             }
         }
+        /// <summary>
+        /// Issues a fresh secret for a confidential client and returns it exactly once.
+        ///
+        /// Only the PBKDF2 hash is stored, matching what the token endpoint verifies against, so
+        /// the value cannot be read back afterwards — the same contract dynamic client
+        /// registration (RFC 7591) gives. Without this there is no way to give a
+        /// `client_credentials` client a secret short of enabling dynamic registration.
+        /// </summary>
+        [HttpPost]
+        [Route("v1/client/secret/reset")]
+        public async Task<dynamic> ClientSecretReset([FromServices] DataAccess da, [FromBody] ArkClient client)
+        {
+            try
+            {
+                var stored = await da.GetClient(client.tenant_id, client.client_id)
+                    ?? throw new ApplicationException("unknown client.");
+                if (string.Equals(stored.token_endpoint_auth_method, "none", StringComparison.OrdinalIgnoreCase))
+                    throw new ApplicationException("this is a public client (token_endpoint_auth_method 'none'); it does not use a secret.");
+
+                var secret = Protocol.ArkCrypto.RandomToken(32);
+                stored.client_secret_hash = Protocol.ArkCrypto.HashSecret(secret);
+                stored.client_secret_expires_at = null; // 0 == does not expire, per RFC 7591
+                await da.UpsertClient(stored);
+                da.Log("client_secret_reset", $"{stored.client_id}", "Client secret reset success", $"details : ci: {stored.client_id}, ti: {stored.tenant_id}");
+                return new
+                {
+                    error = false,
+                    msg = "client secret regenerated - copy it now, it cannot be shown again.",
+                    data = new { stored.client_id, stored.tenant_id, client_secret = secret }
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "client_secret_reset", "v1/client/secret/reset", $"details : ci: {client?.client_id}, ti: {client?.tenant_id}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = (object?)null
+                };
+            }
+        }
         [Route("v1/claim/list")]
         public async Task<dynamic> ClaimsList([FromServices] DataAccess da)
         {
@@ -130,6 +184,94 @@ namespace Ark.oAuth.Oidc
                     error = true,
                     msg = $"{ex.Message}",
                     data = claim
+                };
+            }
+        }
+        [HttpPost]
+        [Route("v1/claim/delete")]
+        public async Task<dynamic> ClaimDelete([FromServices] DataAccess da, [FromBody] ArkClaim claim)
+        {
+            try
+            {
+                await da.DeleteClaim(claim);
+                da.Log("claim_delete", $"{claim.key}", "Claim deleted success", $"details : k: {claim.key}, d: {claim.display}");
+                return new
+                {
+                    error = false,
+                    msg = "claim deleted.",
+                    data = claim
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "claim_delete", "v1/claim/delete", $"details : k: {claim?.key}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = claim
+                };
+            }
+        }
+        [Route("v1/scope/list")]
+        public async Task<dynamic> ScopeList([FromServices] DataAccess da)
+        {
+            return new
+            {
+                error = false,
+                msg = "scopes list loaded.",
+                data = await da.GetScopes()
+            };
+        }
+        [HttpPost]
+        [Route("v1/scope/upsert")]
+        public async Task<dynamic> ScopeUpdate([FromServices] DataAccess da, [FromBody] ArkScope scope)
+        {
+            try
+            {
+                await da.UpsertScope(scope);
+                da.Log("scope_upsert", $"{scope.name}", "Scope updated success", $"details : n: {scope.name}, d: {scope.display}, claims: {scope.claims_}");
+                return new
+                {
+                    error = false,
+                    msg = "scope updated.",
+                    data = scope
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "scope_upsert", "v1/scope/upsert", $"details : n: {scope?.name}, claims: {scope?.claims_}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = scope
+                };
+            }
+        }
+        [HttpPost]
+        [Route("v1/scope/delete")]
+        public async Task<dynamic> ScopeDelete([FromServices] DataAccess da, [FromBody] ArkScope scope)
+        {
+            try
+            {
+                await da.DeleteScope(scope);
+                da.Log("scope_delete", $"{scope.name}", "Scope deleted success", $"details : n: {scope.name}, d: {scope.display}");
+                return new
+                {
+                    error = false,
+                    msg = "scope deleted.",
+                    data = scope
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "scope_delete", "v1/scope/delete", $"details : n: {scope?.name}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = scope
                 };
             }
         }

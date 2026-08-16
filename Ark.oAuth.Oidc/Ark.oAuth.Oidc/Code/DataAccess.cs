@@ -108,6 +108,49 @@ namespace Ark.oAuth.Oidc
             await _ctx.SaveChangesAsync();
             return claim;
         }
+        public async Task<ArkClaim> DeleteClaim(ArkClaim claim)
+        {
+            var tt = await _ctx.claims.FirstOrDefaultAsync(t => t.key == claim.key);
+            if (tt != null)
+            {
+                _ctx.claims.Remove(tt);
+                await _ctx.SaveChangesAsync();
+            }
+            return claim;
+        }
+        public async Task<List<ArkScope>> GetScopes()
+        {
+            return await _ctx.scopes.ToListAsync();
+        }
+        public async Task<ArkScope> UpsertScope(ArkScope scope)
+        {
+            if (string.IsNullOrWhiteSpace(scope?.name)) throw new ApplicationException("empty scope name");
+            scope.name = scope.name.Trim();
+            var tt = await _ctx.scopes.FirstOrDefaultAsync(t => t.name == scope.name);
+            if (tt == null)
+            {
+                _ctx.scopes.Add(scope);
+            }
+            else
+            {
+                _ctx.ChangeTracker.Clear();
+                _ctx.scopes.Update(scope);
+            }
+            await _ctx.SaveChangesAsync();
+            return scope;
+        }
+        public async Task<ArkScope> DeleteScope(ArkScope scope)
+        {
+            var tt = await _ctx.scopes.FirstOrDefaultAsync(t => t.name == (scope.name ?? "").Trim());
+            if (tt == null) return scope; // added on the UI, deleted before ever being saved
+            // Removing a protocol scope (openid, offline_access) breaks the authorization and
+            // token endpoints for every client on the deployment, so it is refused here rather
+            // than left as a one-click way to take the server down.
+            if (tt.is_protocol) throw new ApplicationException($"'{tt.name}' is a protocol scope and cannot be deleted.");
+            _ctx.scopes.Remove(tt);
+            await _ctx.SaveChangesAsync();
+            return scope;
+        }
         public async Task<List<ArkUser>> GetUsers()
         {
             return await _ctx.users.ToListAsync();
