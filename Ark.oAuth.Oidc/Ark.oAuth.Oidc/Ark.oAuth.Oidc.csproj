@@ -1,78 +1,164 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
+	<!--
+		Ark.oAuth.Oidc — the OAuth 2.1 / OpenID Connect provider, packaged for nuget.org.
+
+		Sdk="Microsoft.NET.Sdk.Web" with OutputType=Library is deliberate. The output is a class
+		library, but it ships MVC controllers and Razor views, so it needs the Web SDK's Razor
+		compilation and its implicit FrameworkReference to Microsoft.AspNetCore.App. The price is
+		that the Web SDK also treats appsettings/wwwroot as *application* content and would pack it
+		into every consuming project — see the "Package payload" group below, which turns that off.
+	-->
+
+	<!-- ============================== Compilation ============================== -->
 	<PropertyGroup>
 		<TargetFramework>net9.0</TargetFramework>
-		<Version>1.0.5.45</Version>
-		<Description>oAuth2 oidc IdP implementation, easy fo developer integration</Description>
+		<OutputType>Library</OutputType>
+		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<OutputType>Library</OutputType>
-		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<NeutralLanguage>en</NeutralLanguage>
+		<!--
+			Pinned rather than left to default from the file name: MigrationScript builds resource
+			names by hand ("Ark.oAuth.Oidc.Migration.{provider}.up.00001_sql.sql"), so a rename of
+			the project file would silently break every migration lookup at runtime.
+		-->
+		<RootNamespace>Ark.oAuth.Oidc</RootNamespace>
+		<AssemblyName>Ark.oAuth.Oidc</AssemblyName>
+	</PropertyGroup>
+
+	<!-- ============================== Version ============================== -->
+	<PropertyGroup>
+		<Version>2.0.0</Version>
+		<AssemblyVersion>2.0.0.0</AssemblyVersion>
+		<FileVersion>2.0.0.0</FileVersion>
+	</PropertyGroup>
+
+	<!-- ============================== Package identity ============================== -->
+	<PropertyGroup>
 		<IsPackable>true</IsPackable>
-		<PackageIcon>ark_logo.png</PackageIcon>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<PackageId>Ark.oAuth.Oidc</PackageId>
+		<Title>Ark Identity Server — OAuth 2.1 / OpenID Connect provider</Title>
+		<Description>A self-contained OAuth 2.1 and OpenID Connect provider for ASP.NET Core. Two lines in Program.cs give you authorization code + PKCE, refresh tokens, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration, RP-initiated logout and a discovery document any standard OIDC library can configure itself from. Multi-tenant, runs on SQLite, MySQL, PostgreSQL or SQL Server, and ships its own sign-in, consent and admin UI. Pair it with Ark.oAuth.Client for the application side.</Description>
 		<Authors>Immanuel R</Authors>
-		<Title>Ark's IdP oAuth2 oidc basic flows</Title>
-		<PackageTags>oauth2-oidc; identity server; oauth2 client</PackageTags>
-		<PackageReleaseNotes>trying to do oauth2 a simpler for developers</PackageReleaseNotes>
+		<Company>Immanuel</Company>
+		<Product>Ark Identity Server</Product>
+		<Copyright>Copyright © 2022-2026 Immanuel</Copyright>
+		<PackageTags>oauth oauth2 oauth2.1 oidc openid openid-connect identity identity-provider idp identity-server authentication authorization jwt jwks pkce sso single-sign-on aspnetcore security</PackageTags>
+		<PackageProjectUrl>https://github.com/ir-dev/ark-oauth-oidc</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<PackageIcon>ark_logo.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<DevelopmentDependency>false</DevelopmentDependency>
+		<PackageReleaseNotes>
+2.0.0 — the standards release.
+
+* Full OAuth 2.1 / OpenID Connect protocol core: discovery, JWKS with two-phase key rotation,
+  authorization code + PKCE (S256 only, required for public clients), refresh token rotation,
+  client credentials, device authorization grant (RFC 8628), pushed authorization requests
+  (RFC 9126), introspection (RFC 7662), revocation (RFC 7009), dynamic client registration
+  (RFC 7591/7592), RP-initiated logout, and issuer identification (RFC 9207).
+* Access tokens now follow RFC 9068 (typ: at+jwt, client_id, jti, scope).
+* Codes and refresh tokens are stored as SHA-256 hashes; replay of either is treated as compromise
+  and revokes the derived tokens or the whole refresh-token family.
+* Per-client setup page at /{tenant}/oauth2/integrate/{client_id}, generated from the client's own
+  registration, with copy-paste config for the Ark client, the raw ASP.NET Core handler,
+  oidc-client-ts, Authlib and go-oidc.
+* Sign-in and consent pages load no third-party resources and work under a strict CSP.
+
+Breaking / migration: the implicit grant, the hybrid flow and the resource owner password
+credentials grant are not supported. The v1 /oauth/{tenant}/v1/... routes still work and keep their
+request and response shapes, but now delegate to the protocol core — so codes issued there are
+single-use, expire, and have their PKCE verifier checked. Existing databases must run migration
+00003 (GET /api/migration/v1/sql?action=up&amp;name=00003_sql.sql), which adds the protocol state
+tables and RFC 7591 metadata columns, seeds the scope catalogue, and adopts each tenant's existing
+RSA key as its active signing key with kid = tenant_id, so tokens already issued keep validating.
+
+Packaging: the package no longer ships application content or static web assets into consuming
+projects, and now carries a readme, an SPDX license expression and a symbol package.
+		</PackageReleaseNotes>
+	</PropertyGroup>
+
+	<!-- ============================== Repository / Source Link ============================== -->
+	<PropertyGroup>
 		<RepositoryUrl>https://github.com/ir-dev/ark-oauth-oidc</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<RepositoryBranch>main</RepositoryBranch>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<DebugType>portable</DebugType>
+		<!-- Deterministic paths only on a CI build; locally they make stack traces unreadable. -->
+		<ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true' or '$(TF_BUILD)' == 'true'">true</ContinuousIntegrationBuild>
 	</PropertyGroup>
 
+	<!-- ============================== API documentation ============================== -->
+	<PropertyGroup>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<!-- Ship IntelliSense for what is documented without demanding a doc comment on every
+		     public member before the package can build. -->
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+	</PropertyGroup>
+
+	<!-- ============================== Package payload ============================== -->
+	<PropertyGroup>
+		<!--
+			Without this the Web SDK emits a staticwebassets/ folder plus two build/*.props files
+			that wire wwwroot up to be served from _content/Ark.oAuth.Oidc/. Nothing here is served
+			that way — see the wwwroot group below — so it was dead weight in the package.
+
+			Note this does NOT stop wwwroot being packed: with static web asset processing off, any
+			surviving Content item would be packed as plain content/ instead. The Content Remove
+			below is what actually keeps it out.
+		-->
+		<StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+		<!--
+			IncludeContentInPack is deliberately NOT set to false here. It reads like the switch for
+			"do not ship application content", but in NuGet.Build.Tasks.Pack.targets it gates the
+			whole _GetPackageFiles target — which is also what collects None items marked
+			Pack="true". Setting it false silently drops the icon and the readme and the build fails
+			with NU5046. Unwanted content is excluded item by item instead.
+		-->
+	</PropertyGroup>
+
+	<!-- ==============================================================================
+		Package root files. PackagePath is empty, not "\" — on a non-Windows build MSBuild takes
+		the backslash literally and the icon lands in a directory called "\", which pack then
+		reports as NU5046 "the icon file does not exist in the package".
+	     ============================================================================== -->
 	<ItemGroup>
-		<Content Remove="wwwroot/css/ark-oauth-login.css" />
-		<Content Remove="wwwroot\email\user_activation_.html" />
-		<Content Remove="wwwroot\img\ark-auth.gif" />
-		<Content Remove="wwwroot\img\ark_idp.png" />
-		<Content Remove="wwwroot\img\ark_logo_1.png" />
-		<Content Remove="wwwroot\img\ark_oauth_logo.png" />
-		<Content Remove="wwwroot\img\ark_oidc_logo_2.png" />
-		<Content Remove="wwwroot\img\imm_c_dev_1.png" />
-		<Content Remove="wwwroot\img\oauth-bg.jpg" />
-		<Content Remove="wwwroot\img\profile.png" />
-		<Content Remove="wwwroot\img\security_1.jpg" />
+		<None Include="Icon\ark_logo.png" Pack="true" PackagePath="" Visible="false" />
+		<None Include="README.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 
+	<!-- ==============================================================================
+		wwwroot: embedded, never served.
+
+		AddArkOidcServer runs EmbeddedResourceUnpacker in Development, which writes every embedded
+		resource out to the host's content root. That is how a host which only references this
+		package ends up with the sign-in CSS, the activation email template and the images on disk.
+		Removing the same files from Content stops the Web SDK claiming them as application content.
+	     ============================================================================== -->
 	<ItemGroup>
-	  <None Remove="Migration\Sqlite\down\00001_sql.sql" />
-	  <None Remove="Migration\Sqlite\down\00002_sql.sql" />
-	  <None Remove="Migration\Sqlite\up\00001_sql.sql" />
-	  <None Remove="Migration\Sqlite\up\00002_sql.sql" />
-	  <None Remove="Migration\Sqlite\down\00003_sql.sql" />
-	  <None Remove="Migration\Sqlite\up\00003_sql.sql" />
+		<Content Remove="wwwroot\**" />
+		<EmbeddedResource Include="wwwroot\**" />
 	</ItemGroup>
 
+	<!-- ==============================================================================
+		Migration scripts, looked up by name at runtime as
+		"Ark.oAuth.Oidc.Migration.{Sqlite|Mysql|Postgres|Sqlserver}.{up|down}.{file}.sql".
+		Wildcarded so a new script is picked up by adding the file and nothing else.
+	     ============================================================================== -->
 	<ItemGroup>
-		<EmbeddedResource Include="Migration/Sqlite/down/00001_sql.sql" />
-		<EmbeddedResource Include="Migration\Sqlite\down\00002_sql.sql" />
-		<EmbeddedResource Include="Migration\Sqlite\up\00001_sql.sql" />
-		<EmbeddedResource Include="Migration\Sqlite\up\00002_sql.sql" />
-		<EmbeddedResource Include="Migration\Sqlite\up\00003_sql.sql" />
-		<EmbeddedResource Include="Migration\Sqlite\down\00003_sql.sql" />
-		<EmbeddedResource Include="wwwroot\email\user_activation_.html" />
-		<EmbeddedResource Include="wwwroot\img\profile.png" />
+		<None Remove="Migration\**\*.sql" />
+		<EmbeddedResource Include="Migration\**\*.sql" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<Page Include="wwwroot\img\ark_logo_1.png" />
-	</ItemGroup>
-	
-	<ItemGroup>
-		<None Include="Icon\ark_logo.png" Pack="true" PackagePath="" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<EmbeddedResource Include="wwwroot/css/ark-oauth-login.css" />
-		<EmbeddedResource Include="wwwroot\img\ark-auth.gif" />
-		<EmbeddedResource Include="wwwroot\img\ark_idp.png" />
-		<EmbeddedResource Include="wwwroot\img\ark_logo_1.png" />
-		<EmbeddedResource Include="wwwroot\img\ark_oauth_logo.png" />
-		<EmbeddedResource Include="wwwroot\img\imm_c_dev_1.png" />
-		<EmbeddedResource Include="wwwroot\img\oauth-bg.jpg" />
-		<EmbeddedResource Include="wwwroot\img\security_1.jpg" />
-	</ItemGroup>
-
+	<!-- ============================== Dependencies ============================== -->
 	<ItemGroup>
 		<PackageReference Include="Ark.EfCore" Version="0.0.1.3" />
 		<PackageReference Include="ark.net.util" Version="1.0.4.14" />
@@ -81,4 +167,5 @@
 		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
 		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
 	</ItemGroup>
+
 </Project>
