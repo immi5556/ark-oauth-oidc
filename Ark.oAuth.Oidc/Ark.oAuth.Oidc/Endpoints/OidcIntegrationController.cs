@@ -33,11 +33,20 @@ namespace Ark.oAuth.Oidc.Endpoints
             // Only a signed-in user of this tenant may view a client's setup details. Nothing
             // secret is rendered, but the registration shape is not public information either.
             //
+            // The operator tenant is the exception. The admin console manages every tenant on the
+            // server but signs its users in against its own — so a session there is never scoped
+            // to the tenant whose client is being set up, and without this the console's "Setup
+            // page" link fails with login_required for every tenant but the operator's own.
+            //
             // This deliberately does not start an authorization request of its own: the verifier
             // for such a request would have nowhere to live, and the user would be bounced to the
             // admin console rather than back to this page. Asking them to sign in is honest.
             var session = await _grants.GetSessionAsync(Request.Cookies[OidcAuthorizeController.SessionCookie]);
-            if (session == null || !string.Equals(session.tenant_id, tenant.tenant_id, StringComparison.OrdinalIgnoreCase))
+            var operatorTenant = ServerConfig.TenantId;
+            var permitted = session != null
+                && (string.Equals(session.tenant_id, tenant.tenant_id, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(session.tenant_id, operatorTenant, StringComparison.OrdinalIgnoreCase));
+            if (!permitted)
             {
                 Response.StatusCode = 401;
                 return View("~/Views/Oidc/Error.cshtml", new OidcErrorPageModel
