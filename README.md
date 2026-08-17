@@ -159,6 +159,13 @@ https://idp.example.com/my_idp/.well-known/openid-configuration
 
 There is one URL to know — the **issuer**. Everything else is discovered.
 
+A complete, runnable client is in **`Ark.oAuth.Oidc/Ark.Client.Web`** — a client-only ASP.NET Core
+app whose [README](Ark.oAuth.Oidc/Ark.Client.Web/README.md) walks the whole process: registering
+the client, granting a user access to it, configuring the app, and using the result (protected
+pages, role claims, calling a downstream API, sign-out). Its home page checks its own registration
+against the live discovery document, so setup mistakes surface as a sentence rather than an
+`invalid_request` page. Start from it for new client applications.
+
 Signed in to the admin console, each client has a generated setup page at:
 
 ```

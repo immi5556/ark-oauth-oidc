@@ -25,6 +25,19 @@
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.15" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.15" />
 		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
+		<!--
+			Pinned deliberately, and they must stay on the same version as JsonWebTokens above.
+
+			Microsoft.AspNetCore.Authentication.OpenIdConnect 8.0.15 brings
+			Microsoft.IdentityModel.Protocols[.OpenIdConnect] 7.x, while JsonWebTokens 8.8.0 lifts
+			Microsoft.IdentityModel.Tokens to 8.8.0. The halves do not run together: the 7.x
+			ConfigurationManager fails against 8.x Tokens, GetConfigurationAsync yields no
+			configuration, and every sign-in dies at the challenge with "Cannot redirect to the
+			authorization endpoint, the configuration may be missing or invalid." Nothing warns at
+			build time — the mismatch only shows up on the first challenge.
+		-->
+		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
 	</ItemGroup>
 
 	<ItemGroup>
