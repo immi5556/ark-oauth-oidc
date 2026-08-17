@@ -54,6 +54,51 @@
         public ArkEmailConfig EmailConfig { get; set; }
         /// <summary>Standard OAuth 2.1 / OIDC behaviour. Optional — every value has a default.</summary>
         public Protocol.ArkOidcOptions Oidc { get; set; } = new Protocol.ArkOidcOptions();
+        /// <summary>The first account seeded into a brand-new database. See <see cref="ArkAdminUserConfig"/>.</summary>
+        public ArkAdminUserConfig AdminUser { get; set; } = new ArkAdminUserConfig();
+        /// <summary>The bundled v2 admin console. Optional — every value has a working default.</summary>
+        public ArkAdminConsoleConfig Admin { get; set; } = new ArkAdminConsoleConfig();
+    }
+
+    /// <summary>
+    /// The administrator account created when the database is first built, bound from
+    /// <c>ark_oauth_server:AdminUser</c>.
+    ///
+    /// It used to be <c>admin</c> / <c>admin</c>, compiled in — the same credentials on every
+    /// deployment of this server, for the one account that can administer every tenant on it.
+    /// <see cref="Password"/> is therefore required: seeding stops with a message naming the
+    /// setting rather than falling back to anything guessable.
+    ///
+    /// Only read while the database is being created. Changing it afterwards renames nothing and
+    /// resets no password — use the console for that.
+    /// </summary>
+    public class ArkAdminUserConfig
+    {
+        /// <summary>Login identifier. Does not have to be an email address. Defaults to <c>admin</c>.</summary>
+        public string Username { get; set; }
+        /// <summary>
+        /// Initial password. Required; falls back to <c>ark_oauth_server:DefaultPw</c> when unset, so a
+        /// deployment that already configures one password does not have to configure two.
+        /// </summary>
+        public string Password { get; set; }
+        /// <summary>Display name for the account. Defaults to <c>Admin User</c>.</summary>
+        public string Name { get; set; }
+    }
+
+    /// <summary>Behaviour of the admin console shipped inside this package.</summary>
+    public class ArkAdminConsoleConfig
+    {
+        /// <summary>
+        /// Where the console's <b>Sign out</b> link goes.
+        ///
+        /// The console is a page in the host application, so its session is the host's
+        /// authentication cookie — which only the host can drop. Point this at the host's own
+        /// sign-out route (the sample host uses <c>/Home/SignOutAll</c>, which signs out of both the
+        /// cookie and the OIDC scheme). Left empty, the link falls back to the tenant's
+        /// <c>end_session_endpoint</c>, which ends the session at the IdP but leaves the host's
+        /// cookie in place until it expires.
+        /// </summary>
+        public string SignOutUrl { get; set; }
     }
     public class ArkEmailConfig
     {

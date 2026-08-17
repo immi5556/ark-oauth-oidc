@@ -7,6 +7,13 @@ data/
 *.bin
 .DS_Store
 
+# The admin console's stylesheet and script live in the Ark.oAuth.Oidc package and are served
+# from the assembly. AddArkOidcServer still unpacks every embedded resource into the host's
+# content root in Development, so these two reappear on disk in the sample host; they are copies,
+# not sources, and committing them is how the host and the package drifted apart before.
+Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/wwwroot/css/ark-admin.css
+Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/wwwroot/js/ark-admin.js
+
 # User-specific files
 *.rsuser
 *.suo

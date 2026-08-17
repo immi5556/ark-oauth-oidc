@@ -16,6 +16,7 @@ configure itself.
 - [Integrating an application](#integrating-an-application)
 - [The client package](#the-client-package)
 - [Endpoints](#endpoints)
+- [Admin console](#admin-console)
 - [Flows](#flows)
 - [Configuration reference](#configuration-reference)
 - [Registering clients](#registering-clients)
@@ -110,6 +111,14 @@ app.Run();
     "EnableLogTrace": true,
     "UploadPath": "./wwwroot/{0}/",
     "DefaultPw": "<initial password for new users>",
+    "AdminUser": {                     // the account seeded when the database is first created
+      "Username": "admin",             // optional, defaults to "admin"; need not be an email address
+      "Password": "<required, no default>",
+      "Name": "Admin User"
+    },
+    "Admin": {
+      "SignOutUrl": "/Home/SignOutAll" // where the admin console's Sign out link goes
+    },
     "EmailConfig": {
       "email": "idp@example.com",
       "pw": "<smtp password>",
@@ -134,12 +143,23 @@ app.Run();
 ### 4. Run
 
 ```bash
+dotnet user-secrets set "ark_oauth_server:AdminUser:Password" "<a real password>"
 mkdir -p data && dotnet run
 ```
 
 On first run the server creates its schema, generates an RSA signing key **locally**, seeds the
-OIDC scope catalogue, and creates an `admin` / `admin` account. **Change that password before
-exposing the server.**
+OIDC scope catalogue, and creates the administrator account described by `AdminUser`.
+
+`AdminUser:Password` is **required and has no default**. It was `admin` / `admin`, compiled in —
+the same credentials on every deployment, for the one account that administers every tenant. It
+falls back to `DefaultPw`, and a value left as a `<<placeholder>>` counts as unset; with neither
+configured the first request fails with a message naming the setting, and no database is created,
+so nothing half-built is left behind to be mistaken for an initialised server later. Keep the real
+value in a secret store or an environment variable (`ark_oauth_server__AdminUser__Password`) rather
+than in `appsettings.json`.
+
+The section is read only while the database is being created. Changing it afterwards renames
+nothing and resets no password — use the console.
 
 Your issuer is now:
 
@@ -276,6 +296,44 @@ All paths are relative to the issuer, `{BaseUrl}/{TenantId}`.
 
 ---
 
+## Admin console
+
+The console ships **inside the server package**, so referencing `Ark.oAuth.Oidc` is all the wiring
+there is. It used to live in the sample host, which meant getting a console from a NuGet reference
+alone meant copying a controller, a view, a stylesheet and 800 lines of JavaScript out of this
+repository and keeping them in step by hand.
+
+| Purpose | Path |
+|---|---|
+| Console | `/{tenant_id}/admin` — `/admin` redirects to the tenant in `ark_oauth_server:TenantId` |
+| Stylesheet and script | `/ark-admin/asset/ark-admin.css`, `/ark-admin/asset/ark-admin.js` |
+| Management API it calls | `/api/oauth/v1/…` |
+
+It manages tenants, clients, users, scopes, claims and the per-user-per-client access mapping.
+Clients are edited in a form rather than a generated grid — the grid rendered every column of the
+client record, the tenant's `rsa_private` included, as an editable text box.
+
+The page is self-contained: it sets `Layout = null` and brings its own shell, and the two assets
+are served straight out of the assembly, so no layout, `_ViewStart`, tag helper or `wwwroot` entry
+is required of the host. Tabulator is its single external dependency, loaded pinned from unpkg. The
+assets are also unpacked to the host's content root in Development, where they can be read and
+edited on disk; the served copies always come from the assembly.
+
+Two things are worth knowing:
+
+* **Sign out.** The console's session is the host application's authentication cookie, and only the
+  host can drop it. Point `ark_oauth_server:Admin:SignOutUrl` at a route of your own that signs out
+  of both the cookie and the OIDC scheme — the sample host's `/Home/SignOutAll` is three lines.
+  Left unset, the link falls back to the tenant's `end_session_endpoint`, which ends the session at
+  the IdP but leaves the local cookie in place until it expires.
+* **Overriding it.** Application views win over package views, so a host that wants a different
+  page puts its own `Views/Admin/Manage.cshtml` in the application and keeps the routes and the API.
+
+The v1 console at `/oauth/{tenant}/v1/server/{client_id}/manage` is still served for existing
+deployments and is no longer developed.
+
+---
+
 ## Flows
 
 ### Authorization code + PKCE
@@ -383,6 +441,15 @@ Set `Oidc:RequirePushedAuthorizationRequests` to reject plain authorization requ
 
 ## Configuration reference
 
+Two sections of `ark_oauth_server` sit outside `Oidc`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `AdminUser:Username` | `admin` | Login identifier of the seeded administrator; need not be an email address |
+| `AdminUser:Password` | **none** | Its initial password. Required — falls back to `DefaultPw`, and a `<<placeholder>>` counts as unset. Read only while the database is created |
+| `AdminUser:Name` | `Admin User` | Its display name |
+| `Admin:SignOutUrl` | `end_session_endpoint` | Where the admin console's **Sign out** link goes |
+
 Everything below sits under `ark_oauth_server:Oidc` and is optional; defaults are shown.
 
 | Key | Default | Meaning |
@@ -429,8 +496,7 @@ Per-client settings live on the client record: `access_token_lifetime_seconds`,
 
 ## Registering clients
 
-Through the admin console at `/oauth/{tenant}/v1/server/{tenant}_client/manage`, or with dynamic
-registration when it is enabled:
+Through the admin console at `/{tenant}/admin`, or with dynamic registration when it is enabled:
 
 ```bash
 curl -X POST https://idp.example.com/my_idp/oauth2/register \
@@ -540,7 +606,7 @@ Behaviour worth knowing about when operating this server:
 
 Before going to production:
 
-1. Change the `admin` / `admin` password.
+1. Set `AdminUser:Password` out of band before the first run, and change it after first sign-in.
 2. Set a strong `DefaultPw`.
 3. Keep `RequireHttpsMetadata` at `true`.
 4. Leave `EnableDynamicRegistration` off unless you need it, and keep

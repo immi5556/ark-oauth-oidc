@@ -58,6 +58,14 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
     "Provider": "sqlite",              // sqlite (default) | mysql | postgres | sqlserver
     "UploadPath": "./wwwroot/{0}/",
     "DefaultPw": "<initial password for new users>",
+    "AdminUser": {                     // the account seeded when the database is first created
+      "Username": "admin",             // optional, defaults to "admin"; need not be an email address
+      "Password": "<required>",        // no default - see below
+      "Name": "Admin User"
+    },
+    "Admin": {
+      "SignOutUrl": "/Home/SignOutAll" // where the console's Sign out link goes; see below
+    },
     "Oidc": {
       "EnableDeviceFlow": true,
       "EnablePushedAuthorizationRequests": true,
@@ -78,8 +86,21 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
 ```
 
 On first run the server creates its schema, generates an RSA signing key in-process, seeds the OIDC
-scope catalogue and creates an `admin` / `admin` account. **Change that password before exposing
-the server.**
+scope catalogue and creates the administrator account from `AdminUser`.
+
+`AdminUser:Password` is **required and has no default** — the server used to compile in
+`admin` / `admin`, which put the same credentials on the account that administers every tenant of
+every deployment. It falls back to `DefaultPw`, and a value left as a `<<placeholder>>` counts as
+unset; with neither configured, the first request fails with a message naming the setting and no
+database is created. Supply it out of band rather than in `appsettings.json`:
+
+```bash
+dotnet user-secrets set "ark_oauth_server:AdminUser:Password" "…"   # development
+export ark_oauth_server__AdminUser__Password="…"                    # environment
+```
+
+The section is only read while the database is being created. Changing it afterwards renames
+nothing and resets no password — use the console.
 
 Your issuer is `{BaseUrl}/{TenantId}`, and discovery lives at
 `{BaseUrl}/{TenantId}/.well-known/openid-configuration`.
@@ -131,9 +152,39 @@ Signed in to the admin console, every registered client has a generated setup pa
 URIs and copy-paste snippets for the Ark client package, the raw ASP.NET Core handler,
 `oidc-client-ts`, Authlib and `go-oidc`.
 
+## Admin console
+
+The console ships in this package. Referencing it is all the wiring there is:
+
+| Purpose | Path |
+|---|---|
+| Console | `/{tenant_id}/admin` (`/admin` redirects to the configured tenant) |
+| Its stylesheet and script | `/ark-admin/asset/ark-admin.css`, `/ark-admin/asset/ark-admin.js` |
+
+Tenants, clients, users, scopes, claims and the per-user-per-client access mapping, over the
+management API at `/api/oauth/v1/…`. The page is self-contained — no layout, `_ViewStart`, tag
+helper or `wwwroot` entry is required of the host, because the view brings its own shell and the
+two assets are served straight out of the assembly. Tabulator is its one external dependency,
+loaded pinned from unpkg.
+
+Two things are worth knowing:
+
+* **Sign out.** The console's session is the host application's authentication cookie, and only the
+  host can drop it, so point `ark_oauth_server:Admin:SignOutUrl` at a route of your own that signs
+  out of both the cookie and the OIDC scheme. Left unset, the link falls back to the tenant's
+  `end_session_endpoint`, which ends the session at the IdP but leaves the local cookie in place.
+* **Overriding it.** Application views win over package views: put your own
+  `Views/Admin/Manage.cshtml` in the host to replace the page and keep the routes and API.
+
+`AddArkOidcServer` also unpacks the assets to the host's content root in Development, so they can
+be read and edited on disk; the served copies always come from the assembly.
+
+The v1 console at `/oauth/{tenant}/v1/server/{client_id}/manage` is still served for existing
+deployments and is no longer developed.
+
 ## Before production
 
-1. Change the `admin` / `admin` password.
+1. Set `AdminUser:Password` before the first run, out of band, and change it after first sign-in.
 2. Set a strong `DefaultPw`.
 3. Keep `RequireHttpsMetadata` at `true` on clients.
 4. Leave `EnableDynamicRegistration` off unless you need it, and keep

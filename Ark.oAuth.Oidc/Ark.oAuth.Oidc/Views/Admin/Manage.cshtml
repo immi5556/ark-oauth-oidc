@@ -1,23 +1,43 @@
-﻿@{
-    ViewData["Title"] = "Admin console";
+﻿@*
+    The v2 admin console, shipped inside the server package.
+
+    Self-contained on purpose: Layout is null and the page brings its own shell, because a view
+    that renders inside a NuGet package cannot assume the host has a layout, a _ViewStart, tag
+    helpers, or a wwwroot serving its stylesheet. The CSS and JS come from AdminController.Asset,
+    which reads them straight out of this assembly — so a host that references the package and
+    calls nothing else still gets the console at /{tenant}/admin.
+
+    A host that wants a different console can still override this file by placing its own
+    Views/Admin/Manage.cshtml in the application; application views win over package views.
+*@
+@{
+    Layout = null;
     var tenant = ViewBag.Tenant as Ark.oAuth.ArkTenant;
     var userName = (ViewBag.UserName as string) ?? "";
     var initial = string.IsNullOrEmpty(userName) ? "?" : userName.Substring(0, 1).ToUpperInvariant();
+    var title = tenant?.display ?? tenant?.name ?? (ViewBag.TenantId as string);
 }
-
-@section Styles {
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin" />
+    <title>Admin console — @title</title>
     @* Pinned. The v1 console loaded three copies of Tabulator from an unpinned URL, so it
        silently took whatever version was published that day. *@
-    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet" />
-}
-
+    <link href="https://unpkg.com/tabulator-tables@@5.5.2/dist/css/tabulator.min.css" rel="stylesheet" />
+    <link href="@ViewBag.ConsoleCss" rel="stylesheet" />
+</head>
+<body>
 <header class="ark-topbar">
     @if (!string.IsNullOrEmpty(ViewBag.HostLogo as string))
     {
         <img src="@ViewBag.HostLogo" alt="" />
     }
     <div>
-        <div class="ark-topbar-title">@(tenant?.display ?? tenant?.name ?? ViewBag.TenantId)</div>
+        <div class="ark-topbar-title">@title</div>
         <div class="ark-topbar-sub"><code>@ViewBag.Issuer</code></div>
     </div>
     <span class="ark-topbar-spacer"></span>
@@ -25,7 +45,7 @@
         <a class="ark-btn ark-btn-ghost ark-btn-sm" href="@ViewBag.Discovery" target="_blank" rel="noopener">Discovery</a>
         <span class="ark-avatar">@initial</span>
         <span>@userName</span>
-        <a class="ark-btn ark-btn-ghost" href="/Home/SignOutAll">Sign out</a>
+        <a class="ark-btn ark-btn-ghost" href="@ViewBag.SignOutUrl">Sign out</a>
     </div>
 </header>
 
@@ -311,7 +331,7 @@
 
 <div class="ark-toasts" id="ark-toasts" aria-live="polite"></div>
 
-@section Scripts {
-    <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
-    <script src="~/js/ark-admin.js" asp-append-version="true"></script>
-}
+<script src="https://unpkg.com/tabulator-tables@@5.5.2/dist/js/tabulator.min.js"></script>
+<script src="@ViewBag.ConsoleJs"></script>
+</body>
+</html>

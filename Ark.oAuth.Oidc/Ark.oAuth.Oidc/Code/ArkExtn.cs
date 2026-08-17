@@ -106,9 +106,15 @@ namespace Ark.oAuth.Oidc
                         }
                         else if (!dbContext.Database.CanConnect())
                         {
-                            dbContext.Database.EnsureCreated();
                             var conf = scope.ServiceProvider.GetRequiredService<IConfiguration>();
                             var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+                            // Resolved before the schema is created, not after. Seeding is only ever
+                            // attempted against a database that does not exist yet, so a failure once
+                            // the file is on disk would leave an empty schema behind that every later
+                            // start treats as already initialised — no tenant, no client, no admin,
+                            // and no second attempt.
+                            var admin = ResolveAdminUser(ser);
+                            dbContext.Database.EnsureCreated();
                             var htp = scope.ServiceProvider.GetService<IHttpContextAccessor>();
                             var util = scope.ServiceProvider.GetRequiredService<ArkUtil>();
                             // Signing keys are generated here, in this process. They used to be
@@ -210,18 +216,18 @@ namespace Ark.oAuth.Oidc
                             {
                                 dbContext.claims.Add(new ArkClaim() { key = item, display = item });
                             }
-                            //admin user
+                            //admin user — credentials come from configuration, see ResolveAdminUser
                             dbContext.users.Add(new ArkUser()
                             {
                                 //claims = lls,
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
                                 //client_id = $"{ser.TenantId}_client",
-                                email = "admin",
+                                email = admin.Username,
                                 emailed = false,
-                                hash_pw = util.HashPasswordPBKDF2("admin"),
+                                hash_pw = util.HashPasswordPBKDF2(admin.Password),
                                 reset_mode = false,
                                 type = "user",
-                                name = "Admin User"
+                                name = admin.Name
                             });
                             dbContext.user_client_claims.Add(new ArkUserClientClaim()
                             {
@@ -229,7 +235,9 @@ namespace Ark.oAuth.Oidc
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
                                 client_id = $"{cll.id}",
                                 tenant_id = $"{ser.TenantId}",
-                                email = "admin"
+                                // no mapping row for this client means the admin cannot sign in to
+                                // the console at all — the username here has to be the seeded one
+                                email = admin.Username
                             });
                             var ts = scope.ServiceProvider.GetRequiredService<TokenServer>();
                             //service user service_user
@@ -262,12 +270,63 @@ namespace Ark.oAuth.Oidc
                     }
                     catch (Exception ex)
                     {
-                        // Log error
+                        // A bootstrap that threw has not happened. Releasing the latch lets the next
+                        // request try again once the cause is fixed — leaving it set would have the
+                        // process serve requests against a database it never finished creating,
+                        // failing later with errors that say nothing about the real cause.
+                        Interlocked.Exchange(ref _dataInitialized, 0);
                         throw new Exception("Database initialization failed", ex);
                     }
                 }
                 await next();
             });
+        }
+
+        /// <summary>
+        /// Resolves the administrator account to seed from <c>ark_oauth_server:AdminUser</c>.
+        ///
+        /// The password is the one value with no default. It used to be the literal "admin",
+        /// compiled in beside the username — every deployment of this server therefore started
+        /// with the same credentials on the one account that administers every tenant, and the
+        /// only thing standing between a fresh install and a stranger was whether anyone had
+        /// read the release notes. Refusing to seed is louder than seeding something guessable:
+        /// this runs once, while the database is being created, so the message lands in front of
+        /// whoever is installing the server rather than months later.
+        ///
+        /// <c>DefaultPw</c> is accepted as the fallback because it already means "the initial
+        /// password for an account created without one", which is exactly what this is.
+        /// </summary>
+        private static (string Username, string Password, string Name) ResolveAdminUser(ArkAuthServerConfig ser)
+        {
+            var cfg = ser.AdminUser ?? new ArkAdminUserConfig();
+
+            var username = string.IsNullOrWhiteSpace(cfg.Username) ? "admin" : cfg.Username.Trim();
+            var name = string.IsNullOrWhiteSpace(cfg.Name) ? "Admin User" : cfg.Name.Trim();
+            var password = Configured(cfg.Password) ?? Configured(ser.DefaultPw);
+
+            if (string.IsNullOrWhiteSpace(password))
+                throw new ApplicationException(
+                    $"no password is configured for the administrator account '{username}', so the " +
+                    "database cannot be seeded. Set 'ark_oauth_server:AdminUser:Password' (or " +
+                    "'ark_oauth_server:DefaultPw'); a value still left as a '<<placeholder>>' counts " +
+                    "as unset. Prefer a secret store or an environment variable — " +
+                    "ark_oauth_server__AdminUser__Password — over appsettings.json. This server no " +
+                    "longer falls back to seeding a well-known 'admin' / 'admin' account.");
+
+            return (username, password, name);
+        }
+
+        /// <summary>
+        /// A configured secret, or null when the setting is empty or still holds one of the
+        /// <c>&lt;&lt;placeholder&gt;&gt;</c> markers the sample configuration files ship with.
+        /// Treating <c>&lt;&lt;change-me&gt;&gt;</c> as a real password would put a value published
+        /// in this repository on the administrator account of anyone who ran the sample unedited.
+        /// </summary>
+        private static string? Configured(string? value)
+        {
+            var trimmed = (value ?? "").Trim();
+            if (trimmed.Length == 0) return null;
+            return trimmed.StartsWith("<<") && trimmed.EndsWith(">>") ? null : value;
         }
 
         /// <summary>

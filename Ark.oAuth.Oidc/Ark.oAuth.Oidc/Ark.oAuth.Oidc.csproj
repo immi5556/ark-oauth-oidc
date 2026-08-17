@@ -68,8 +68,21 @@
   registration, with copy-paste config for the Ark client, the raw ASP.NET Core handler,
   oidc-client-ts, Authlib and go-oidc.
 * Sign-in and consent pages load no third-party resources and work under a strict CSP.
+* The admin console now ships inside this package, at /{tenant}/admin — tenants, clients, users,
+  scopes, claims and the access mapping, with no view, stylesheet or script to copy into the host.
+  Its CSS and JS are served from the assembly at /ark-admin/asset/{file}. Point
+  ark_oauth_server:Admin:SignOutUrl at your own sign-out route, since only the host can drop its
+  own authentication cookie. The v1 console at /oauth/{tenant}/v1/server/{client}/manage is still
+  served and no longer developed.
 
-Breaking / migration: the implicit grant, the hybrid flow and the resource owner password
+Breaking / migration: the administrator account seeded into a new database now comes from
+ark_oauth_server:AdminUser (Username, Password, Name) instead of the compiled-in "admin" / "admin".
+Password is required, falls back to DefaultPw, and a value left as a &lt;&lt;placeholder&gt;&gt;
+counts as unset — seeding stops with a message naming the setting rather than creating an account
+whose credentials are published in the release notes of every deployment. Existing databases are
+untouched: the section is only read while the schema is being created.
+
+The implicit grant, the hybrid flow and the resource owner password
 credentials grant are not supported. The v1 /oauth/{tenant}/v1/... routes still work and keep their
 request and response shapes, but now delegate to the protocol core — so codes issued there are
 single-use, expire, and have their PKCE verifier checked. Existing databases must run migration
