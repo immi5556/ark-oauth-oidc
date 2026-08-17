@@ -9,6 +9,7 @@ namespace Ark.oAuth.Oidc.Endpoints
     /// </summary>
     [Route("{tenant_id}/oauth2")]
     [ApiController]
+    [Microsoft.AspNetCore.Cors.EnableCors(ArkCors.PolicyName)]
     public class OidcUserInfoController : ArkOidcControllerBase
     {
         private readonly ArkTokenService _tokens;

@@ -29,6 +29,34 @@ namespace Ark.oAuth.Oidc.Protocol
 
         /// <summary>Show the consent screen even for first-party clients that did not ask for it.</summary>
         public bool AlwaysRequireConsent { get; set; } = false;
+
+        /// <summary>
+        /// Browser origins allowed to call the token, userinfo, discovery and JWKS endpoints with
+        /// fetch/XHR — the origins of your single-page applications, e.g.
+        /// <c>https://localhost:7255</c>.
+        ///
+        /// Empty by default, which means no cross-origin call succeeds. A SPA redeems its
+        /// authorization code from the browser, so without its origin listed here the exchange
+        /// fails in the browser's CORS preflight and never reaches the server. Server-side clients
+        /// (the authorization code flow through a web application, client_credentials) do not go
+        /// through a browser and need nothing here.
+        ///
+        /// List exact origins — scheme, host and port. There is no wildcard: the endpoints below
+        /// hand out tokens, and an origin list is the only thing keeping any page on the internet
+        /// from asking for one.
+        /// </summary>
+        public List<string> CorsOrigins { get; set; } = new();
+    }
+
+    /// <summary>
+    /// The CORS policy applied to the endpoints a browser-based client has to reach directly.
+    ///
+    /// Applied per endpoint with <c>[EnableCors(ArkCors.PolicyName)]</c> rather than globally, so
+    /// the interactive pages (sign-in, consent, admin console) stay same-origin only.
+    /// </summary>
+    public static class ArkCors
+    {
+        public const string PolicyName = "ark-oidc-browser";
     }
 
     /// <summary>

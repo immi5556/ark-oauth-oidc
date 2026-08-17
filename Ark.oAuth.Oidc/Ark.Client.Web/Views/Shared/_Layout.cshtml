@@ -147,6 +147,13 @@
         .scroll-x { overflow-x: auto; }
 
         form.inline { display: inline; margin: 0; }
+
+        input[type=text], input:not([type]), select {
+            font: inherit; font-size: 13.5px; padding: 5px 8px;
+            background: var(--bg); color: var(--fg);
+            border: 1px solid var(--border); border-radius: 7px;
+        }
+        input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
     </style>
 </head>
 <body>
@@ -158,6 +165,10 @@
             <a href="/home/profile">Profile</a>
             <a href="/home/roles">Roles</a>
             <a href="/home/downstream">Downstream API</a>
+            <span style="color:var(--border)">|</span>
+            <a href="/flows/spa">SPA</a>
+            <a href="/flows/machine">Machine</a>
+            <a href="/flows/register">Registration</a>
             <span class="spacer"></span>
             @if (User.Identity?.IsAuthenticated == true)
             {

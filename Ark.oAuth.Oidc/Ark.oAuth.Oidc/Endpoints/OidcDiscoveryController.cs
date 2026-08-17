@@ -12,6 +12,7 @@ namespace Ark.oAuth.Oidc.Endpoints
     /// returned every tenant's configuration, which meant discovery leaked the whole deployment.
     /// </summary>
     [ApiController]
+    [Microsoft.AspNetCore.Cors.EnableCors(ArkCors.PolicyName)]
     public class OidcDiscoveryController : ArkOidcControllerBase
     {
         private readonly ArkKeyService _keys;

@@ -173,6 +173,13 @@ namespace Ark.oAuth
             services.AddSingleton<AuthClientHelper>();
             services.AddScoped<ArkAuthContext>();
 
+            // Registration diagnostics and the two flows that need no browser. All three are
+            // stateless over the discovery document, so they are safe as singletons and are
+            // registered whether or not this application uses them.
+            services.AddSingleton<ArkSetupProbe>();
+            services.AddSingleton<ArkClientCredentials>();
+            services.AddSingleton<ArkRegistration>();
+
             if (!ccc.UseLegacyFlow)
             {
                 services.AddArkOidcInteractive(ccc);

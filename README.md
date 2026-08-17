@@ -229,6 +229,23 @@ builder.Services
     .AddArkOidcApi(arkConfig);
 ```
 
+### The flows the handler does not cover
+
+`AddArkOidcClient` also registers three services for the cases outside interactive sign-in. All
+three read the provider's discovery document, so they need the issuer and nothing else.
+
+| Service | For |
+|---|---|
+| `ArkSetupProbe` | Pairs local configuration with the provider's metadata and returns `ArkSetupModel` — issuer mismatch, unregistered scopes, the exact redirect URI this app will send. Render it and a registration mistake reads as a sentence instead of `invalid_client`. |
+| `ArkClientCredentials` | The client credentials grant, with `GetTokenAsync` caching until shortly before expiry and `RequestTokenAsync` for a live exchange. |
+| `ArkRegistration` | Dynamic client registration (RFC 7591) and management (RFC 7592). |
+
+```csharp
+var model  = await setup.ProbeAsync(HttpContext);
+var token  = await credentials.GetTokenAsync(clientId, secret, new[] { "reports.read" });
+var client = await registration.RegisterAsync(metadata, token.AccessToken);
+```
+
 ### Talking to a different provider
 
 Because this is the standard handler, changing `Authority` and `ClientId` is enough to point the
@@ -382,6 +399,26 @@ Everything below sits under `ark_oauth_server:Oidc` and is optional; defaults ar
 | `DeviceCodeLifetimeSeconds` | `600` | Device code validity |
 | `DevicePollIntervalSeconds` | `5` | Minimum device polling interval |
 | `ParLifetimeSeconds` | `90` | `request_uri` validity |
+| `CorsOrigins` | `[]` | Browser origins allowed to call the token, userinfo, discovery and JWKS endpoints — see below |
+
+### Browser clients and `CorsOrigins`
+
+A single-page application redeems its authorization code from the browser, so the token endpoint is
+called cross-origin. Empty by default, which means no cross-origin call succeeds; list the exact
+origins of your SPAs (scheme, host and port — there is no wildcard, because these endpoints hand
+out tokens):
+
+```jsonc
+"ark_oauth_server": { "Oidc": { "CorsOrigins": [ "https://app.example.com" ] } }
+```
+
+The policy applies only to `/oauth2/token`, `/oauth2/userinfo`, discovery and JWKS, and never
+allows credentials — a browser client authenticates with a bearer token, not a cookie. The host
+enables it with `app.UseArkOidcCors()` between `UseRouting()` and `UseAuthorization()`.
+Server-side clients need none of this.
+
+A working example, including the JavaScript, is at `/flows/spa` in
+[`Ark.Client.Web`](Ark.oAuth.Oidc/Ark.Client.Web/README.md#the-other-flows).
 
 Per-client settings live on the client record: `access_token_lifetime_seconds`,
 `id_token_lifetime_seconds`, `refresh_token_lifetime_seconds`,
@@ -416,6 +453,17 @@ Redirect URIs are validated at registration: they must be absolute, carry no fra
 
 Supported `token_endpoint_auth_method` values: `client_secret_basic`, `client_secret_post`,
 `private_key_jwt`, `none`.
+
+The initial access token must carry the `client.register` scope. That token comes from the client
+credentials grant, so registration is a two-step chain: a machine client obtains a token, and that
+token authorises the registration. The server seeds a machine client for this — `<tenant>_machine`,
+registered for `client_credentials` and `client.register`, and deliberately created **without a
+secret** so that no deployment ships with a well-known one. Give it a secret with **Regenerate
+secret** in the admin console before using it.
+
+`Ark.oAuth.Client` provides both halves (`ArkClientCredentials`, `ArkRegistration`), and
+[`Ark.Client.Web`](Ark.oAuth.Oidc/Ark.Client.Web/README.md#the-other-flows) drives them from
+`/flows/register`.
 
 ---
 

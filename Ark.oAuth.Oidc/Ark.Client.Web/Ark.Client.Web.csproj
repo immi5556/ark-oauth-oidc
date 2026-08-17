@@ -5,6 +5,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Ark.Client.Web</RootNamespace>
+    <!--
+      The machine client's secret belongs in user-secrets rather than in appsettings.json:
+        dotnet user-secrets set "sample:Machine:ClientSecret" "the-secret"
+    -->
+    <UserSecretsId>0bc207fd-3c2b-4811-910b-c22200d90dbb</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

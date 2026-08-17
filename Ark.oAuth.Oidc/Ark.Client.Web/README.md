@@ -21,6 +21,7 @@ Use it two ways:
 - [Step 3 — Grant a user access](#step-3--grant-a-user-access)
 - [Step 4 — Configure the application](#step-4--configure-the-application)
 - [Step 5 — Run and verify](#step-5--run-and-verify)
+- [The other flows](#the-other-flows)
 - [Using it from application code](#using-it-from-application-code)
 - [Confidential clients](#confidential-clients)
 - [Porting this into a new project](#porting-this-into-a-new-project)
@@ -183,6 +184,9 @@ Then walk the pages:
 | `/home/profile` | Claims on the principal, plus the decoded access and ID tokens. |
 | `/home/roles` | `ark_claims` → role projection, granted or not. |
 | `/home/downstream` | Calling an API with the user's access token. |
+| `/flows/spa` | The same flow run by JavaScript in a public client — see below. |
+| `/flows/machine` | The client credentials grant, live. |
+| `/flows/register` | Dynamic client registration (RFC 7591) and management (RFC 7592). |
 | Sign out | RP-initiated logout through the provider's `end_session_endpoint`. |
 
 What happens on the wire, for reference:
@@ -198,6 +202,93 @@ POST {authority}/oauth2/authorize            (credentials, then consent)
     and writes the encrypted authentication cookie
   302 → /home/profile
 ```
+
+---
+
+## The other flows
+
+Everything above is one flow: the authorization code flow through a server-side web application,
+where the OpenID Connect handler does the work. Three cases it does not cover have their own
+pages, each running live against the provider.
+
+### `/flows/spa` — single-page application
+
+The same authorization code flow with PKCE, run entirely by the browser. The page is its own
+`redirect_uri`, the exchange happens in `fetch`, and the tokens live in a JavaScript variable that
+a reload discards.
+
+Two things have to be set up, and both fail outside the application if they are not:
+
+1. **Register a second client.** It is a public client whose redirect URI is the page itself:
+
+   | | |
+   |---|---|
+   | client_id | `ark_sample_spa` (`sample:Spa:ClientId`) |
+   | redirect_uris | `https://localhost:7255/flows/spa` |
+   | token_endpoint_auth_method | `none` |
+   | grant_types | `authorization_code` |
+   | scopes | `openid profile email` |
+
+   Register it in the admin console, or create it from `/flows/register`.
+
+2. **Allow this origin on the provider.** A SPA calls the token endpoint cross-origin, so the
+   browser sends a preflight first and blocks the real request if the server does not answer it —
+   with a console error and no server-side trace:
+
+   ```jsonc
+   // Ark.oAuth.Oidc.Host/appsettings.json
+   "ark_oauth_server": { "Oidc": { "CorsOrigins": [ "https://localhost:7255" ] } }
+   ```
+
+   Exact origins only; there is no wildcard, because these endpoints hand out tokens. The policy
+   covers the token, userinfo, discovery and JWKS endpoints. The authorization endpoint is a
+   browser redirect and needs nothing.
+
+No `offline_access`: a refresh token is a long-lived credential and a browser has nowhere safe to
+keep one. Tokens are held in memory rather than `localStorage`, which any script on the page can
+read. An application that needs durable browser sessions should put a backend in front of the flow
+— which is what the rest of this sample is.
+
+### `/flows/machine` — client credentials
+
+A service authenticating as itself: no user, no browser, no redirect. Use it for scheduled jobs
+and service-to-service calls; never to act on behalf of a signed-in user, because the token then
+carries the service's authority rather than theirs and every audit record downstream says so.
+
+The provider seeds a machine client, `<tenant>_machine`, with **no secret** — a secret committed to
+source would be the same secret on every deployment. Give it one:
+
+1. Admin console → **Clients** → `ark_idp_machine` → **Regenerate secret** (shown once).
+2. ```bash
+   dotnet user-secrets set "sample:Machine:ClientSecret" "<the secret>" --project Ark.Client.Web
+   ```
+
+### `/flows/register` — dynamic client registration
+
+Creating a client at runtime over RFC 7591 instead of by hand, then reading and deleting it over
+RFC 7592. Registration is itself an authorized operation, so the page chains the two flows: it
+obtains an initial access token with the client credentials grant above, then registers with it.
+
+The provider must have it switched on — it is off by default, since an open registration endpoint
+lets anyone create clients:
+
+```jsonc
+// Ark.oAuth.Oidc.Host/appsettings.json
+"ark_oauth_server": {
+  "Oidc": {
+    "EnableDynamicRegistration": true,
+    "RequireRegistrationAccessToken": true   // the initial access token needs scope client.register
+  }
+}
+```
+
+The `client_secret` and `registration_access_token` in the response are shown **once** — the server
+keeps only hashes. The registration access token is not the client's access token and cannot be
+re-derived; lose it and the registration can only be removed by an operator with database access.
+
+Registering a client is also not the same as authorizing anyone to use it: on Ark a user still has
+to be mapped to the new client under **Access mapping**, or their sign-in fails in a way that looks
+like a wrong password.
 
 ---
 
@@ -251,6 +342,53 @@ SignOut(new AuthenticationProperties { RedirectUri = "/" },
 
 ```csharp
 builder.Services.AddAuthentication().AddArkOidcApi(arkConfig);
+```
+
+**Check this app's own registration**
+
+`AddArkOidcClient` also registers `ArkSetupProbe`, which pairs local configuration with the
+provider's discovery document. `ArkSetupModel` is what the home page renders — it is in the client
+library, not in this sample, so any Ark client can show the same check.
+
+```csharp
+public HomeController(ArkSetupProbe setup) => _setup = setup;
+
+public async Task<IActionResult> Index() => View(await _setup.ProbeAsync(HttpContext));
+// model.IssuerMismatch, model.UnsupportedScopes, model.RedirectUri, model.DiscoveryError …
+```
+
+**Get a token as the service itself**
+
+```csharp
+public class ReconciliationJob(ArkClientCredentials credentials)
+{
+    public async Task RunAsync()
+    {
+        // cached until shortly before expiry; RequestTokenAsync always hits the network
+        var token = await credentials.GetTokenAsync(clientId, clientSecret, new[] { "jobs.run" });
+        if (!token.Succeeded) throw new InvalidOperationException(token.ErrorDescription);
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
+    }
+}
+```
+
+**Register a client at runtime**
+
+```csharp
+var initial = await credentials.GetTokenAsync(machineId, machineSecret, new[] { "client.register" });
+
+var result = await registration.RegisterAsync(new JsonObject
+{
+    ["client_name"] = "My new client",
+    ["redirect_uris"] = new JsonArray("https://app.example.com/signin-oidc"),
+    ["grant_types"] = new JsonArray("authorization_code", "refresh_token"),
+    ["token_endpoint_auth_method"] = "none",
+    ["scope"] = "openid profile email offline_access"
+}, initial.AccessToken);
+
+// result.ClientSecret and result.RegistrationAccessToken are returned once — store them here.
+// registration.ReadAsync / DeleteAsync manage it afterwards with that token.
 ```
 
 ---

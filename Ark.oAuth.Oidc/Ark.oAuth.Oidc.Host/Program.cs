@@ -36,6 +36,7 @@ app.UseStaticFiles();
 // UseRouting has to run before UseAuthentication/UseAuthorization: without a selected endpoint
 // the authorization middleware cannot see the [Authorize] metadata it is meant to enforce.
 app.UseRouting();
+app.UseArkOidcCors();   // token/userinfo/discovery for the origins in Oidc:CorsOrigins
 app.UseArkAuthData();   // one-time database bootstrap, seeds tenant/client/scopes/admin user
 app.UseArkOidcClient(); // no-op unless ark_oauth_client:UseLegacyFlow is set
 app.UseAuthentication();

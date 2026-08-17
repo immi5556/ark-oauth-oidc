@@ -1,4 +1,8 @@
-@model SetupModel
+@*
+    The model is ArkSetupModel from Ark.oAuth.Client, built by ArkSetupProbe — the same object any
+    Ark client application can render. Only this markup is specific to the sample.
+*@
+@model ArkSetupModel
 @{
     ViewData["Title"] = "Setup";
 }
@@ -189,6 +193,35 @@ app.UseAuthorization();
         </p>
         <a class="btn" href="/account/login?returnUrl=%2Fhome%2Fprofile">Sign in and show my profile</a>
     }
+</div>
+
+<h2>Other flows</h2>
+<div class="card">
+    <p style="margin-top:0">
+        Everything above is the authorization code flow through a web application, where the
+        OpenID Connect handler does the work. Three cases it does not cover have their own pages,
+        each running live against this provider:
+    </p>
+    <div class="kv">
+        <div><a href="/flows/spa">Single-page app</a></div>
+        <div>
+            The same authorization code flow with PKCE, run by JavaScript in a public client. No
+            secret, no server session, tokens in memory only.
+        </div>
+        <div><a href="/flows/machine">Client credentials</a></div>
+        <div>
+            A service authenticating as itself, with no user anywhere in the exchange. For
+            scheduled jobs and service-to-service calls.
+        </div>
+        <div><a href="/flows/register">Dynamic registration</a></div>
+        <div>
+            Creating a client at runtime over RFC 7591 instead of by hand in the admin console
+            @if (Model.DiscoveryOk && !Model.SupportsDynamicRegistration)
+            {
+                <text> — </text><span class="pill warn">disabled on this provider</span>
+            }
+        </div>
+    </div>
 </div>
 
 @if (Model.DiscoveryOk)

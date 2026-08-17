@@ -1,0 +1,297 @@
+@model RegisterModel
+@{
+    ViewData["Title"] = "Dynamic registration";
+}
+
+<h1>Dynamic client registration</h1>
+<p class="sub">
+    Creating a client at runtime over RFC 7591, instead of typing its metadata into an admin
+    console. The provider answers with a <code>client_id</code>, a secret if the client is
+    confidential, and a registration access token that is the only way to manage it afterwards.
+</p>
+
+@if (!Model.DiscoveryOk)
+{
+    <div class="note bad">
+        <strong>The provider's discovery document could not be read.</strong>
+        <code>@Model.DiscoveryError</code>
+    </div>
+}
+else if (!Model.SupportsDynamicRegistration)
+{
+    <div class="note warn">
+        <strong>This provider does not advertise a <code>registration_endpoint</code>.</strong>
+        <p style="margin:6px 0 0">
+            Dynamic registration is off, which is the default — an open registration endpoint lets
+            anyone create clients. Turn it on in the provider's configuration and restart it:
+        </p>
+        <pre style="margin-top:8px">// Ark.oAuth.Oidc.Host/appsettings.json
+"ark_oauth_server": {
+  "Oidc": {
+    "EnableDynamicRegistration": true,
+    "RequireRegistrationAccessToken": true
+  }
+}</pre>
+    </div>
+}
+
+<h2>What registration is, and what it is not</h2>
+<div class="card">
+    <p style="margin-top:0">
+        Registration establishes a client's <em>identity</em> with the provider: which redirect URIs
+        it may use, which grants it may request, which scopes it may ask for. It is the step that
+        makes <code>invalid_client</code> stop happening.
+    </p>
+    <div class="note">
+        It is <strong>not</strong> authorization to sign anyone in. Ark authorizes per user, per
+        client: after registering, a user still has to be mapped to the new client under
+        <strong>Access mapping</strong>, or their sign-in fails in a way that looks like a wrong
+        password.
+    </div>
+    <p style="margin-bottom:0">
+        Registration is itself an authorized operation. The caller presents an <strong>initial
+        access token</strong> — on Ark, one carrying the <code>client.register</code> scope — and
+        getting that token is exactly what the
+        <a href="/flows/machine">client credentials</a> flow is for. This page chains the two.
+    </p>
+</div>
+
+<h2>Step 1 — the initial access token</h2>
+<div class="card">
+    <div class="kv">
+        <div>machine client_id</div><div><code>@Model.MachineClientId</code></div>
+        <div>client_secret</div>
+        <div>
+            @if (Model.MachineSecretConfigured)
+            {
+                <span class="pill ok">configured</span>
+            }
+            else
+            {
+                <span class="pill bad">not set</span>
+            }
+        </div>
+        <div>scope</div><div><code>client.register</code></div>
+        <div>registration_endpoint</div><div><code>@(Model.RegistrationEndpoint ?? "—")</code></div>
+    </div>
+
+    @if (!Model.MachineSecretConfigured)
+    {
+        <div class="note warn">
+            Without the machine client's secret the registration below is sent unauthenticated. If
+            the provider requires an initial access token — it does by default — it will answer
+            <code>invalid_client</code>. Set the secret on the
+            <a href="/flows/machine">client credentials</a> page first.
+        </div>
+    }
+
+    @if (Model.InitialAccessToken != null)
+    {
+        var iat = Model.InitialAccessToken;
+        if (iat.Succeeded)
+        {
+            <div class="note ok">
+                <strong>Token obtained.</strong> Scope <code>@(iat.Scope ?? "—")</code>, valid for
+                @iat.ExpiresIn seconds. It was cached, so registering again within its lifetime
+                reuses it.
+            </div>
+        }
+        else
+        {
+            <div class="note bad">
+                <strong>Could not obtain an initial access token: @iat.Error</strong><br />
+                @iat.ErrorDescription
+            </div>
+        }
+    }
+</div>
+
+<h2>Step 2 — register a client</h2>
+<div class="card">
+    <form method="post" action="/flows/register">
+        @Html.AntiForgeryToken()
+        <div class="kv" style="margin-bottom:14px">
+            <div>client_name</div>
+            <div><input name="ClientName" value="@Model.ClientName" style="width:100%" /></div>
+
+            <div>redirect_uris</div>
+            <div><input name="RedirectUris" value="@Model.RedirectUris" style="width:100%" /></div>
+
+            <div>post_logout_redirect_uris</div>
+            <div><input name="PostLogoutRedirectUris" value="@Model.PostLogoutRedirectUris" style="width:100%" /></div>
+
+            <div>grant_types</div>
+            <div><input name="GrantTypes" value="@Model.GrantTypes" style="width:100%" /></div>
+
+            <div>scope</div>
+            <div><input name="Scope" value="@Model.Scope" style="width:100%" /></div>
+
+            <div>token_endpoint_auth_method</div>
+            <div>
+                <select name="TokenEndpointAuthMethod">
+                    <option value="none" selected="@(Model.TokenEndpointAuthMethod == "none")">none (public client)</option>
+                    <option value="client_secret_post" selected="@(Model.TokenEndpointAuthMethod == "client_secret_post")">client_secret_post</option>
+                    <option value="client_secret_basic" selected="@(Model.TokenEndpointAuthMethod == "client_secret_basic")">client_secret_basic</option>
+                </select>
+            </div>
+
+            <div>application_type</div>
+            <div>
+                <select name="ApplicationType">
+                    <option value="web" selected="@(Model.ApplicationType == "web")">web</option>
+                    <option value="native" selected="@(Model.ApplicationType == "native")">native</option>
+                </select>
+            </div>
+        </div>
+        <button class="btn" type="submit">Register</button>
+    </form>
+
+    <div class="note">
+        Redirect URIs are matched exactly and must be absolute. <code>https</code> is required
+        except for loopback addresses, which native clients are allowed to use (RFC 8252 §7.3), and
+        a fragment is never allowed. Choosing <code>none</code> makes this a public client: no
+        secret is issued and PKCE becomes mandatory.
+    </div>
+</div>
+
+@if (Model.Registration != null)
+{
+    var reg = Model.Registration;
+
+    <h2>The registration response</h2>
+    <div class="card">
+        @if (reg.Succeeded)
+        {
+            <div class="note ok"><strong>@reg.StatusCode — client created.</strong></div>
+            <div class="kv">
+                <div>client_id</div><div><code>@reg.ClientId</code></div>
+                <div>client_name</div><div><code>@(reg.ClientName ?? "—")</code></div>
+                @if (!string.IsNullOrEmpty(reg.ClientSecret))
+                {
+                    <div>client_secret</div><div><code>@reg.ClientSecret</code></div>
+                }
+                @if (!string.IsNullOrEmpty(reg.RegistrationAccessToken))
+                {
+                    <div>registration_access_token</div><div><code>@reg.RegistrationAccessToken</code></div>
+                }
+                @if (!string.IsNullOrEmpty(reg.RegistrationClientUri))
+                {
+                    <div>registration_client_uri</div><div><code>@reg.RegistrationClientUri</code></div>
+                }
+            </div>
+            <div class="note warn">
+                <strong>Copy the secret and the registration access token now.</strong> Both are
+                shown exactly once — the server keeps only hashes. The registration access token is
+                not the client's access token and cannot be re-derived: lose it and this
+                registration can only be removed by an operator with database access.
+            </div>
+        }
+        else
+        {
+            <div class="note bad">
+                <strong>@(reg.StatusCode == 0 ? "Request failed" : reg.StatusCode.ToString()) — @reg.Error</strong><br />
+                @reg.ErrorDescription
+                @if (reg.Error == "invalid_client")
+                {
+                    <div style="margin-top:6px">
+                        The initial access token was missing, invalid, or did not carry the
+                        <code>client.register</code> scope.
+                    </div>
+                }
+                else if (reg.Error == "invalid_redirect_uri")
+                {
+                    <div style="margin-top:6px">
+                        Every redirect URI must be absolute, must use <code>https</code> unless it
+                        is a loopback address, and must not contain a fragment.
+                    </div>
+                }
+                else if (reg.Error == "registration_not_supported")
+                {
+                    <div style="margin-top:6px">
+                        Dynamic registration is switched off on this provider — see the top of this
+                        page.
+                    </div>
+                }
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(reg.RequestBody))
+        {
+            <h2 style="margin-top:22px">What was sent</h2>
+            <pre>@reg.RequestBody</pre>
+        }
+        <h2 style="margin-top:22px">What came back</h2>
+        <pre>@reg.RawResponse</pre>
+    </div>
+}
+
+<h2>Step 3 — manage an existing registration (RFC 7592)</h2>
+<div class="card">
+    <p style="margin-top:0">
+        The registration access token authenticates these calls, and nothing else does — not the
+        client's own access token, not the initial access token that created it.
+    </p>
+    <form method="post" action="/flows/register/manage">
+        @Html.AntiForgeryToken()
+        <div class="kv" style="margin-bottom:14px">
+            <div>client_id</div>
+            <div><input name="clientId" value="@Model.ManageClientId" style="width:100%" /></div>
+            <div>registration_access_token</div>
+            <div><input name="accessToken" value="@Model.ManageAccessToken" style="width:100%" /></div>
+        </div>
+        <button class="btn" type="submit" name="action" value="read">Read registration</button>
+        <button class="btn ghost" type="submit" name="action" value="delete">Delete registration</button>
+    </form>
+</div>
+
+@if (Model.Management != null)
+{
+    var mgmt = Model.Management;
+
+    <h2>@(Model.ManagementAction == "delete" ? "Delete" : "Read") result</h2>
+    <div class="card">
+        @if (mgmt.Succeeded)
+        {
+            <div class="note ok">
+                <strong>@mgmt.StatusCode — @(Model.ManagementAction == "delete" ? "registration deleted." : "registration read.")</strong>
+                @if (Model.ManagementAction == "delete")
+                {
+                    <text>
+                        The client no longer exists. Any token it was issued stays valid until it
+                        expires — deleting a registration does not revoke tokens already out there.
+                    </text>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="note bad">
+                <strong>@(mgmt.StatusCode == 0 ? "Request failed" : mgmt.StatusCode.ToString()) — @mgmt.Error</strong><br />
+                @mgmt.ErrorDescription
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(mgmt.RawResponse))
+        {
+            <pre>@mgmt.RawResponse</pre>
+        }
+    </div>
+}
+
+<h2>The code</h2>
+<div class="card">
+    <pre>// Both steps come from Ark.oAuth.Client. The registration endpoint is read from
+// discovery: if the provider does not advertise one, registration is disabled.
+var initial = await credentials.GetTokenAsync(machineId, machineSecret, new[] { "client.register" });
+
+var metadata = new JsonObject
+{
+    ["client_name"] = "My new client",
+    ["redirect_uris"] = new JsonArray("https://app.example.com/signin-oidc"),
+    ["grant_types"] = new JsonArray("authorization_code", "refresh_token"),
+    ["token_endpoint_auth_method"] = "none",
+    ["scope"] = "openid profile email offline_access"
+};
+
+var result = await registration.RegisterAsync(metadata, initial.AccessToken);
+// result.ClientSecret and result.RegistrationAccessToken are shown once - store them here.</pre>
+</div>

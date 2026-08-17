@@ -145,7 +145,11 @@ namespace Ark.oAuth.Oidc.Protocol
             new ArkScope { name = "email", display = "Your email address", description = "Your email address and whether it is verified.", is_default = true, claims = StandardScopeClaims["email"].ToList() },
             new ArkScope { name = "address", display = "Your address", description = "Your postal address.", claims = StandardScopeClaims["address"].ToList() },
             new ArkScope { name = "phone", display = "Your phone number", description = "Your phone number and whether it is verified.", claims = StandardScopeClaims["phone"].ToList() },
-            new ArkScope { name = "offline_access", display = "Stay signed in", description = "Keep access when you are not using the app.", require_consent = true, is_protocol = true }
+            new ArkScope { name = "offline_access", display = "Stay signed in", description = "Keep access when you are not using the app.", require_consent = true, is_protocol = true },
+            // Machine-to-machine scope: what an initial access token must carry to create clients
+            // through the RFC 7591 registration endpoint. Never a default — a client only holds it
+            // if someone registered it for that client deliberately.
+            new ArkScope { name = "client.register", display = "Register clients", description = "Create and manage client registrations.", is_protocol = true }
         };
     }
 }

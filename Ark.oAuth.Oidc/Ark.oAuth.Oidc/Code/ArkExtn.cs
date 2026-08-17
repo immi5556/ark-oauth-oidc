@@ -189,6 +189,7 @@ namespace Ark.oAuth.Oidc
                                 }
                             };
                             dbContext.clients.Add(cll);
+                            dbContext.clients.Add(BuildMachineClient(ser.TenantId, domain));
                             var lls = new List<string>()
                             {
                                 "sub",
@@ -256,6 +257,8 @@ namespace Ark.oAuth.Oidc
                         }
 
                         ReconcileAdminConsoleClient(scope.ServiceProvider);
+                        ReconcileScopeCatalogue(scope.ServiceProvider);
+                        ReconcileMachineClient(scope.ServiceProvider);
                     }
                     catch (Exception ex)
                     {
@@ -265,6 +268,86 @@ namespace Ark.oAuth.Oidc
                 }
                 await next();
             });
+        }
+
+        /// <summary>
+        /// The machine-to-machine client: <c>client_credentials</c> only, no user, no redirect.
+        ///
+        /// It is created without a secret, so it cannot authenticate until an operator presses
+        /// <b>Regenerate secret</b> on it in the admin console. That is the point — a secret
+        /// seeded in source would be the same secret on every deployment of this server, and a
+        /// client that can mint tokens is exactly the wrong place to keep a well-known default.
+        /// </summary>
+        private static ArkClient BuildMachineClient(string tenantId, string domain) => new()
+        {
+            tenant_id = tenantId,
+            client_id = $"{tenantId}_machine",
+            display = $"{tenantId} Machine Client (Display)",
+            name = $"{tenantId} machine",
+            client_name = $"{tenantId} Machine-to-Machine",
+            domain = domain,
+            expire_mins = 60,
+            at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+
+            application_type = "web",
+            // confidential: the client_credentials grant has no user to authenticate, so the
+            // secret is the whole of the client's identity
+            token_endpoint_auth_method = "client_secret_post",
+            require_pkce = false,
+            is_active = true,
+            grant_types = new List<string> { "client_credentials" },
+            response_types = new List<string>(),
+            // client.register is what an initial access token needs to create clients through
+            // the RFC 7591 endpoint; drop it if you do not use dynamic registration
+            scopes = new List<string> { "client.register" },
+            redirect_uris = new List<string>(),
+            post_logout_redirect_uris = new List<string>(),
+            redirect_url = "",
+            logout_url = ""
+        };
+
+        /// <summary>
+        /// Creates the machine client on a database that predates it.
+        ///
+        /// Seeding only runs when the database is created, so an existing deployment would
+        /// otherwise have no client_credentials client at all. The record it adds cannot obtain a
+        /// token until someone gives it a secret, so adding it is inert.
+        /// </summary>
+        private static void ReconcileMachineClient(IServiceProvider services)
+        {
+            var conf = services.GetRequiredService<IConfiguration>();
+            var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
+            if (ser == null || string.IsNullOrWhiteSpace(ser.TenantId)) return;
+
+            var dbContext = services.GetRequiredService<ArkDataContext>();
+            var clientId = $"{ser.TenantId}_machine";
+            if (dbContext.clients.Any(c => c.tenant_id == ser.TenantId && c.client_id == clientId)) return;
+
+            var domain = Uri.TryCreate(ser.BaseUrl, UriKind.Absolute, out var baseUri) ? baseUri.Host : "";
+            dbContext.clients.Add(BuildMachineClient(ser.TenantId, domain));
+            dbContext.SaveChanges();
+        }
+
+        /// <summary>
+        /// Adds scopes this version knows about that an older database was never seeded with.
+        ///
+        /// The catalogue is written once, when the database is created, so a scope introduced
+        /// later — <c>client.register</c>, say — simply does not exist on an existing deployment,
+        /// and every request for it is rejected with `invalid_scope` for a reason nothing in the
+        /// error explains. Only missing rows are inserted; an operator's edits to an existing
+        /// scope are never overwritten.
+        /// </summary>
+        private static void ReconcileScopeCatalogue(IServiceProvider services)
+        {
+            var dbContext = services.GetRequiredService<ArkDataContext>();
+            var existing = dbContext.scopes.Select(s => s.name).ToList();
+            var missing = Protocol.ArkClaimsService.DefaultScopes()
+                .Where(s => !existing.Contains(s.name, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            if (missing.Count == 0) return;
+
+            dbContext.scopes.AddRange(missing);
+            dbContext.SaveChanges();
         }
 
         /// <summary>
@@ -351,9 +434,74 @@ namespace Ark.oAuth.Oidc
             services.AddScoped<Protocol.ArkGrantStore>();
             services.AddScoped<Protocol.ArkClientAuthenticator>();
 
+            // browser clients (SPAs) redeem their code from the page itself, so the token and
+            // userinfo endpoints need a CORS policy — see ark_oauth_server:Oidc:CorsOrigins
+            services.AddCors();
+            services.AddSingleton<Microsoft.Extensions.Options.IConfigureOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>,
+                ArkCorsConfigurator>();
+
             // the interactive endpoints render Razor views shipped inside this package
             services.AddControllersWithViews();
             services.AddAntiforgery(o => o.Cookie.Name = "ark_idp_csrf");
+        }
+
+        /// <summary>
+        /// Enables the CORS middleware for the endpoints marked with
+        /// <c>[EnableCors(ArkCors.PolicyName)]</c>.
+        ///
+        /// Call it after <c>UseRouting</c> and before <c>UseAuthorization</c>: the middleware
+        /// reads the policy off the selected endpoint, so with no endpoint selected yet it has
+        /// nothing to apply, and after authorization has run a rejected preflight never gets its
+        /// headers. A cross-origin token request that arrives without these headers fails in the
+        /// browser rather than at the server, which makes it look like the client is misconfigured.
+        /// </summary>
+        public static void UseArkOidcCors(this IApplicationBuilder builder) => builder.UseCors();
+    }
+
+    /// <summary>
+    /// Builds the browser policy from configuration.
+    ///
+    /// Done as an <c>IConfigureOptions</c> rather than inline in <c>AddArkOidcServer</c> so the
+    /// policy can read <c>IConfiguration</c> out of the container — the registration method takes
+    /// only the environment, and hosts should not have to pass configuration twice.
+    /// </summary>
+    internal sealed class ArkCorsConfigurator
+        : Microsoft.Extensions.Options.IConfigureOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>
+    {
+        private readonly IConfiguration _configuration;
+
+        public ArkCorsConfigurator(IConfiguration configuration) => _configuration = configuration;
+
+        public void Configure(Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions options)
+        {
+            var origins = (_configuration.GetSection("ark_oauth_server:Oidc:CorsOrigins").Get<string[]>()
+                    ?? Array.Empty<string>())
+                .Where(o => !string.IsNullOrWhiteSpace(o))
+                .Select(o => o.Trim().TrimEnd('/'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            options.AddPolicy(Protocol.ArkCors.PolicyName, policy =>
+            {
+                if (origins.Length == 0)
+                {
+                    // Configured with no origins means cross-origin access is off, not open.
+                    policy.SetIsOriginAllowed(_ => false);
+                    return;
+                }
+
+                policy
+                    .WithOrigins(origins)
+                    .WithMethods("GET", "POST", "OPTIONS")
+                    .WithHeaders("Authorization", "Content-Type", "Accept")
+                    // the reason a 401 from /userinfo is legible in a browser console
+                    .WithExposedHeaders("WWW-Authenticate")
+                    .SetPreflightMaxAge(TimeSpan.FromMinutes(10));
+
+                // Deliberately no AllowCredentials(). A browser client authenticates with a bearer
+                // token in the Authorization header; letting it send cookies cross-origin would
+                // put the server's own session cookie on requests it did not initiate.
+            });
         }
     }
     public static class ExtnUtil

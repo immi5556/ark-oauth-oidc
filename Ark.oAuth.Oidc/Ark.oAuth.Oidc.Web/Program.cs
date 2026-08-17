@@ -29,6 +29,7 @@ app.UseStaticFiles();
 // the authorization middleware cannot see the [Authorize] metadata it is meant to enforce.
 // (This ran in the opposite order previously.)
 app.UseRouting();
+app.UseArkOidcCors();   // token/userinfo/discovery for the origins in Oidc:CorsOrigins
 app.UseArkAuthData();   // one-time database bootstrap
 app.UseArkOidcClient(); // no-op unless ark_oauth_client:UseLegacyFlow is set
 app.UseAuthentication();

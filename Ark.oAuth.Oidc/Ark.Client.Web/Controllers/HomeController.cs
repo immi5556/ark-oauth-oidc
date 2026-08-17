@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Text;
-using System.Text.Json;
 using Ark.Client.Web.Models;
 using Ark.oAuth;
 using Microsoft.AspNetCore.Authentication;
@@ -12,15 +10,17 @@ namespace Ark.Client.Web.Controllers
     public class HomeController : Controller
     {
         private readonly ArkAuthConfig _config;
+        private readonly ArkSetupProbe _setup;
         private readonly IHttpClientFactory _http;
         private readonly IConfiguration _appConfig;
 
         // AddArkOidcClient registers the parsed `ark_oauth_client` section as a singleton, so the
         // application reads the same values the handler was configured with rather than a second
-        // copy that can drift.
-        public HomeController(ArkAuthConfig config, IHttpClientFactory http, IConfiguration appConfig)
+        // copy that can drift. ArkSetupProbe comes from the same registration.
+        public HomeController(ArkAuthConfig config, ArkSetupProbe setup, IHttpClientFactory http, IConfiguration appConfig)
         {
             _config = config;
+            _setup = setup;
             _http = http;
             _appConfig = appConfig;
         }
@@ -29,74 +29,17 @@ namespace Ark.Client.Web.Controllers
 
         // -----------------------------------------------------------------------------------------
         // Public page: a live check of whether this app is registered correctly.
+        //
+        // The probe fetches the provider's discovery document, which is exactly what the OIDC
+        // handler does on its first challenge. Doing it here turns "the sign-in button throws"
+        // into a readable message on the page — wrong port, provider not running, self-signed
+        // certificate.
         // -----------------------------------------------------------------------------------------
         public async Task<IActionResult> Index([FromQuery] string? auth_error)
         {
-            var authority = _config.ResolveAuthority();
-            var origin = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
-
-            var model = new SetupModel
-            {
-                Authority = authority,
-                ClientId = _config.ClientId ?? "",
-                IsConfidential = !string.IsNullOrWhiteSpace(_config.ClientSecret),
-                Scopes = _config.ResolveScopes(),
-                RoleClaimType = _config.RoleClaimType ?? "role",
-                RedirectUri = origin + (_config.CallbackPath ?? "/signin-oidc"),
-                PostLogoutRedirectUri = origin + (_config.SignedOutCallbackPath ?? "/signout-callback-oidc"),
-                DiscoveryUrl = $"{authority.TrimEnd('/')}/.well-known/openid-configuration",
-                IsAuthenticated = User.Identity?.IsAuthenticated == true,
-                SignedInAs = User.FindFirst("name")?.Value ?? User.FindFirst("email")?.Value,
-                AuthError = auth_error
-            };
-
-            await ProbeDiscoveryAsync(model);
+            var model = await _setup.ProbeAsync(HttpContext);
+            model.AuthError = auth_error;
             return View(model);
-        }
-
-        /// <summary>
-        /// Fetches the provider's discovery document, which is exactly what the OIDC handler does
-        /// on its first challenge. Doing it here turns "the sign-in button throws" into a readable
-        /// message on the page — wrong port, provider not running, self-signed certificate.
-        /// </summary>
-        private async Task ProbeDiscoveryAsync(SetupModel model)
-        {
-            if (string.IsNullOrWhiteSpace(model.Authority))
-            {
-                model.DiscoveryError = "ark_oauth_client:Authority is not set.";
-                return;
-            }
-
-            try
-            {
-                var client = _http.CreateClient("downstream");
-                using var response = await client.GetAsync(model.DiscoveryUrl);
-                var body = await response.Content.ReadAsStringAsync();
-                if (!response.IsSuccessStatusCode)
-                {
-                    model.DiscoveryError = $"the provider answered {(int)response.StatusCode} {response.ReasonPhrase}.";
-                    return;
-                }
-
-                using var doc = JsonDocument.Parse(body);
-                var root = doc.RootElement;
-                string? Str(string name) => root.TryGetProperty(name, out var v) ? v.GetString() : null;
-
-                model.Issuer = Str("issuer");
-                model.AuthorizationEndpoint = Str("authorization_endpoint");
-                model.TokenEndpoint = Str("token_endpoint");
-                model.UserInfoEndpoint = Str("userinfo_endpoint");
-                model.EndSessionEndpoint = Str("end_session_endpoint");
-                model.JwksUri = Str("jwks_uri");
-                if (root.TryGetProperty("scopes_supported", out var scopes) && scopes.ValueKind == JsonValueKind.Array)
-                    model.ScopesSupported = scopes.EnumerateArray().Select(s => s.GetString() ?? "").ToList();
-
-                model.DiscoveryOk = true;
-            }
-            catch (Exception ex)
-            {
-                model.DiscoveryError = ex.Message;
-            }
         }
 
         // -----------------------------------------------------------------------------------------
@@ -131,8 +74,8 @@ namespace Ark.Client.Web.Controllers
                 HasAccessToken = !string.IsNullOrEmpty(accessToken),
                 HasIdToken = !string.IsNullOrEmpty(idToken),
                 HasRefreshToken = !string.IsNullOrEmpty(refreshToken),
-                AccessTokenPayload = DecodeJwtPayload(accessToken),
-                IdTokenPayload = DecodeJwtPayload(idToken),
+                AccessTokenPayload = ArkJwt.DecodePayload(accessToken),
+                IdTokenPayload = ArkJwt.DecodePayload(idToken),
                 RequiredRole = RequiredRole
             };
 
@@ -180,7 +123,7 @@ namespace Ark.Client.Web.Controllers
                 var client = _http.CreateClient("downstream");
                 using var response = await client.SendAsync(request);
                 model.StatusCode = (int)response.StatusCode;
-                model.Body = Prettify(await response.Content.ReadAsStringAsync());
+                model.Body = ArkJson.Prettify(await response.Content.ReadAsStringAsync());
             }
             catch (Exception ex)
             {
@@ -193,45 +136,5 @@ namespace Ark.Client.Web.Controllers
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error() =>
             View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
-
-        // -----------------------------------------------------------------------------------------
-        // Display helpers. Neither is a security boundary.
-        // -----------------------------------------------------------------------------------------
-
-        /// <summary>
-        /// Renders a JWT payload for the page. It deliberately does not validate the token —
-        /// validation already happened in the handler, and re-checking a signature here would
-        /// suggest an application is supposed to inspect its own access token, which it is not.
-        /// </summary>
-        private static string? DecodeJwtPayload(string? jwt)
-        {
-            if (string.IsNullOrEmpty(jwt)) return null;
-            var parts = jwt.Split('.');
-            if (parts.Length < 2) return "(not a JWT — the provider issued an opaque token)";
-
-            try
-            {
-                var payload = parts[1].Replace('-', '+').Replace('_', '/');
-                payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
-                return Prettify(Encoding.UTF8.GetString(Convert.FromBase64String(payload)));
-            }
-            catch
-            {
-                return "(could not decode)";
-            }
-        }
-
-        private static string Prettify(string json)
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(json);
-                return JsonSerializer.Serialize(doc.RootElement, new JsonSerializerOptions { WriteIndented = true });
-            }
-            catch
-            {
-                return json;
-            }
-        }
     }
 }
