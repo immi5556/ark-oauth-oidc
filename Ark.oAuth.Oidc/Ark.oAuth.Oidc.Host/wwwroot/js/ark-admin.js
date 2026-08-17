@@ -82,6 +82,14 @@
         return (value || "").split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
     }
 
+    /**
+     * Whether a login identifier is an email address rather than a plain username.
+     * Only used to decide whether a mailbox exists to send to — the server is what validates.
+     */
+    function isEmailAddress(value) {
+        return /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(value || "");
+    }
+
     /** Writes a JSON-list property in both the shapes the entity exposes. */
     function setList(target, field, values) {
         target[field] = values;
@@ -138,17 +146,25 @@
 
     // ---------------------------------------------------------------- tenants
 
-    function actionColumn(label, cls, handler, width) {
+    /**
+     * `applies` is optional: when given, the button is only drawn for rows it accepts, so an
+     * action that cannot succeed for a row is not offered on that row at all.
+     */
+    function actionColumn(label, cls, handler, width, applies) {
         return {
             title: "",
             field: "__" + label.toLowerCase().replace(/\W+/g, "_"),
             width: width || 80,
             hozAlign: "center",
             headerSort: false,
-            formatter: function () {
+            formatter: function (cell) {
+                if (applies && !applies(cell.getRow().getData())) return "";
                 return '<button type="button" class="' + (cls || "") + '">' + label + "</button>";
             },
-            cellClick: function (e, cell) { handler(cell); }
+            cellClick: function (e, cell) {
+                if (applies && !applies(cell.getRow().getData())) return;
+                handler(cell);
+            }
         };
     }
 
@@ -515,7 +531,9 @@
                     data: state.users,
                     layout: "fitColumns",
                     columns: [
-                        { title: "email", field: "email", editor: "input", widthGrow: 3 },
+                        // The login identifier. It is stored in `email`, but it does not have to
+                        // be an address — `admin` and the service accounts are usernames.
+                        { title: "username / email", field: "email", editor: "input", widthGrow: 3 },
                         { title: "name", field: "name", editor: "input", widthGrow: 2 },
                         {
                             title: "type", field: "type", editor: "list", width: 110,
@@ -527,14 +545,16 @@
                         { title: "at", field: "at", width: 165 },
                         actionColumn("Save", "", function (cell) {
                             var row = cell.getRow().getData();
-                            if (!row.email) { toast("w", "email is required", 4000); return; }
+                            if (!row.email) { toast("w", "a username or email is required", 4000); return; }
                             save(API + "/user/upsert", row, "user saved").then(loadUsers).catch(function () { });
                         }),
+                        // A reset link needs a mailbox, so this only applies to accounts whose
+                        // login id is an address. The server refuses the rest with a message; not
+                        // drawing the button avoids inviting the error in the first place.
                         actionColumn("Reset password", "", function (cell) {
                             var row = cell.getRow().getData();
-                            if (!row.email) return;
                             save(API + "/user/pw/reset/init", row).then(loadUsers).catch(function () { });
-                        }, 150)
+                        }, 150, function (row) { return isEmailAddress(row.email); })
                     ]
                 });
             } else {

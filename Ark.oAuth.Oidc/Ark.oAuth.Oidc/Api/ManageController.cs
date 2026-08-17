@@ -12,42 +12,75 @@ namespace Ark.oAuth.Oidc
         [Route("v1/tenant/list")]
         public async Task<dynamic> TenantList([FromServices] DataAccess da)
         {
+            var tenants = await da.GetTenants();
             return new
             {
                 error = false,
                 msg = "tenatns list loaded.",
-                data = await da.GetTenants()
+                // rsa_private is deliberately not projected. This response is read by a page in a
+                // browser, so returning it published every tenant's *signing* key to the client —
+                // anything that can read the DOM or the response cache could then mint tokens the
+                // server would accept. Nothing needs it: the console renders only a
+                // present/absent badge off rsa_public, and an upsert that omits the pair is
+                // treated as "leave the key alone".
+                data = tenants.Select(t => new
+                {
+                    t.tenant_id,
+                    t.name,
+                    t.display,
+                    t.rsa_public,
+                    t.issuer,
+                    t.audience,
+                    t.expire_mins,
+                    t.at
+                })
             };
         }
         [HttpPost]
         [Route("v1/tenant/upsert")]
         public async Task<dynamic> TenantUpdate([FromServices] DataAccess da, [FromServices] ArkUtil util, [FromBody] ArkTenant tenant)
         {
-            if (string.IsNullOrEmpty(tenant.rsa_private))
+            try
             {
-                // An edit that does not carry the key back must not rotate it. Regenerating here
-                // silently invalidates every token and JWKS entry already issued for the tenant,
-                // so the stored pair is preserved and a new one is only minted for a new tenant.
-                var existing = await da.GetTenant(tenant.tenant_id);
-                if (existing != null && !string.IsNullOrEmpty(existing.rsa_private))
+                if (string.IsNullOrEmpty(tenant.rsa_private))
                 {
-                    tenant.rsa_private = existing.rsa_private;
-                    tenant.rsa_public = existing.rsa_public;
+                    // An edit that does not carry the key back must not rotate it. Regenerating here
+                    // silently invalidates every token and JWKS entry already issued for the tenant,
+                    // so the stored pair is preserved and a new one is only minted for a new tenant.
+                    var existing = await da.GetTenant(tenant.tenant_id);
+                    if (existing != null && !string.IsNullOrEmpty(existing.rsa_private))
+                    {
+                        tenant.rsa_private = existing.rsa_private;
+                        tenant.rsa_public = existing.rsa_public;
+                    }
+                    else
+                    {
+                        dynamic dd = await util.GetKeys();
+                        tenant.rsa_private = dd.private_key;
+                        tenant.rsa_public = dd.public_key;
+                    }
                 }
-                else
+                await da.UpsertTenant(tenant);
+                da.Log("tenant_upsert", $"{tenant.tenant_id}", "Tenant updated success", $"details : ti: {tenant.tenant_id}, n: {tenant.name}, d: {tenant.display}, em: {tenant.expire_mins}");
+                return new
                 {
-                    dynamic dd = await util.GetKeys();
-                    tenant.rsa_private = dd.private_key;
-                    tenant.rsa_public = dd.public_key;
-                }
+                    error = false,
+                    msg = "tenants updated successfully.",
+                    data = tenant
+                };
             }
-            await da.UpsertTenant(tenant);
-            return new
+            catch (Exception ex)
             {
-                error = false,
-                msg = "tenants updated successfully.",
-                data = tenant
-            };
+                // Without this the console saw a bare 500 (or, while key generation was still an
+                // outbound call, a 503) with no message describing what went wrong.
+                da.LogError(ex, "tenant_upsert", "v1/tenant/upsert", $"details : ti: {tenant?.tenant_id}, n: {tenant?.name}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = tenant
+                };
+            }
         }
         [Route("v1/client/list")]
         public async Task<dynamic> ClientList([FromServices] DataAccess da)
@@ -353,13 +386,23 @@ namespace Ark.oAuth.Oidc
         {
             try
             {
-                await da.UpsertUser(user);
+                var existing = await da.GetUser((user?.email ?? "").ToLower().Trim());
+                var saved = await da.UpsertUser(user);
                 da.Log("user_upsert", "v1/user/upsert", "user updated", $"deails : e: {user?.email}, name: {user?.name}, rm: {user?.reset_mode}");
+                // A new account is usable in one of two ways, and which one it is decides what the
+                // operator has to do next — so say so rather than reporting a bare "user updated."
+                var msg = existing != null
+                    ? "user updated."
+                    : (saved.reset_mode ?? false)
+                        ? ((saved.emailed ?? false)
+                            ? "user created - an activation link has been emailed."
+                            : "user created, but the activation email could not be sent - use 'Reset password' to retry.")
+                        : "user created - it signs in with the configured default password (ark_oauth_server:DefaultPw).";
                 return new
                 {
                     error = false,
-                    msg = "user updated.",
-                    data = user
+                    msg,
+                    data = saved
                 };
             }
             catch (Exception ex)

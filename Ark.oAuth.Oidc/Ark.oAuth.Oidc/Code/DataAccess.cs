@@ -32,7 +32,39 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkTenant> UpsertTenant(ArkTenant tenant)
         {
+            if (string.IsNullOrWhiteSpace(tenant?.tenant_id)) throw new ApplicationException("tenant_id is required.");
+            tenant.tenant_id = tenant.tenant_id.Trim();
+            // name/display/issuer/audience are NOT NULL columns, and the console adds a blank row
+            // for the operator to fill in — so anything left empty is defaulted here rather than
+            // failing the insert with a constraint violation the operator cannot act on.
+            var root = $"{_util.ServerConfig.BaseUrl}{(string.IsNullOrWhiteSpace(_util.ServerConfig.BasePath) ? "" : $"/{_util.ServerConfig.BasePath.Trim('/')}")}";
+            tenant.name = string.IsNullOrWhiteSpace(tenant.name) ? tenant.tenant_id : tenant.name.Trim();
+            tenant.display = string.IsNullOrWhiteSpace(tenant.display) ? tenant.name : tenant.display.Trim();
+            tenant.issuer = string.IsNullOrWhiteSpace(tenant.issuer) ? $"{root}/ark/oauth/v1/iss" : tenant.issuer.Trim();
+            tenant.audience = string.IsNullOrWhiteSpace(tenant.audience) ? $"{root}/ark/oauth/v1/aud" : tenant.audience.Trim();
+            if (tenant.expire_mins <= 0) tenant.expire_mins = 480;
+
             var tt = await _ctx.tenants.FirstOrDefaultAsync(t => t.tenant_id == tenant.tenant_id);
+
+            // rsa_public/rsa_private are NOT NULL. A caller that omits them means "leave the key
+            // alone" — never "rotate it", which would invalidate every token and JWKS entry the
+            // tenant has already issued — so an existing pair is carried over and a new tenant
+            // gets a freshly minted one.
+            if (string.IsNullOrEmpty(tenant.rsa_private) || string.IsNullOrEmpty(tenant.rsa_public))
+            {
+                if (tt != null && !string.IsNullOrEmpty(tt.rsa_private))
+                {
+                    tenant.rsa_private = tt.rsa_private;
+                    tenant.rsa_public = tt.rsa_public;
+                }
+                else
+                {
+                    var (pub, priv) = Protocol.ArkCrypto.GenerateRsaKeyPair();
+                    tenant.rsa_private = priv;
+                    tenant.rsa_public = pub;
+                }
+            }
+
             if (tt == null)
             {
                 tenant.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
@@ -54,6 +86,7 @@ namespace Ark.oAuth.Oidc
         public async Task<ArkClient> UpsertClient(ArkClient client)
         {
             if (string.IsNullOrEmpty((client?.id ?? "").Trim())) client.id = null;
+            await NormaliseClient(client);
             var tt = (await _ctx.clients.FirstOrDefaultAsync(t => t.id.ToLower() == (client.id ?? "").ToLower())) ?? (await _ctx.clients.FirstOrDefaultAsync(t => t.tenant_id.ToLower() == (client.tenant_id ?? "").ToLower() && t.client_id.ToLower() == (client.client_id ?? "").ToLower()));
             if (tt == null)
             {
@@ -69,6 +102,51 @@ namespace Ark.oAuth.Oidc
             }
             await _ctx.SaveChangesAsync();
             return client;
+        }
+        /// <summary>
+        /// Fills in the v1 single-valued columns a client row still requires from the RFC 7591
+        /// metadata the console actually edits.
+        ///
+        /// name, display, domain, redirect_url and logout_url are NOT NULL, but the client drawer
+        /// posts null for every text box left blank — so registering a client the standard way
+        /// (client_name + redirect_uris, no legacy fields) failed on
+        /// "NOT NULL constraint failed: clients.name" with nothing on screen to say which box to
+        /// fill. Deriving them keeps both styles of payload valid and keeps the two
+        /// representations consistent, which is what EffectiveRedirectUris et al. assume.
+        /// </summary>
+        async Task NormaliseClient(ArkClient client)
+        {
+            if (string.IsNullOrWhiteSpace(client?.client_id)) throw new ApplicationException("client_id is required.");
+            if (string.IsNullOrWhiteSpace(client.tenant_id)) throw new ApplicationException("tenant_id is required.");
+            client.client_id = client.client_id.Trim();
+            client.tenant_id = client.tenant_id.Trim();
+
+            // A missing tenant otherwise surfaces as a bare "FOREIGN KEY constraint failed".
+            if (await GetTenant(client.tenant_id) == null)
+                throw new ApplicationException($"unknown tenant '{client.tenant_id}' - create the tenant first.");
+
+            var label = new[] { client.client_name, client.display, client.name, client.client_id }
+                .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? client.client_id;
+            client.client_name = string.IsNullOrWhiteSpace(client.client_name) ? label : client.client_name;
+            client.name = string.IsNullOrWhiteSpace(client.name) ? label : client.name;
+            client.display = string.IsNullOrWhiteSpace(client.display) ? label : client.display;
+
+            // The plural forms win when populated, so fall back to the first of each list.
+            client.redirect_url = string.IsNullOrWhiteSpace(client.redirect_url)
+                ? (client.redirect_uris.FirstOrDefault(u => !string.IsNullOrWhiteSpace(u)) ?? "")
+                : client.redirect_url.Trim();
+            client.logout_url = string.IsNullOrWhiteSpace(client.logout_url)
+                ? (client.post_logout_redirect_uris.FirstOrDefault(u => !string.IsNullOrWhiteSpace(u)) ?? "")
+                : client.logout_url.Trim();
+
+            if (string.IsNullOrWhiteSpace(client.domain))
+            {
+                var source = new[] { client.redirect_url, client.logout_url, client.client_uri, _util.ServerConfig.BaseUrl }
+                    .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
+                client.domain = Uri.TryCreate(source, UriKind.Absolute, out var uri) ? uri.Host : "";
+            }
+
+            if (client.expire_mins <= 0) client.expire_mins = 480;
         }
         public async Task<ArkClient> DeleteClient(ArkClient client)
         {
@@ -219,21 +297,60 @@ namespace Ark.oAuth.Oidc
             await _ctx.SaveChangesAsync();
             return us_cl;
         }
+        /// <summary>
+        /// A login identifier is either an email address or a plain username.
+        ///
+        /// The sign-in screen has always posted a free-text "Username", and the bootstrap seed
+        /// creates `admin` and `service_account_{tenant}` — neither of which is an email. Only
+        /// account *creation* insisted on an address, so those accounts could not be reproduced
+        /// through the console. Usernames are kept to characters that survive a URL path segment
+        /// unescaped, since they travel in the claims-mapping routes.
+        /// </summary>
+        static bool IsValidLoginId(string id) =>
+            ark.net.util.EmailUtil.IsValidFormat(id) ||
+            System.Text.RegularExpressions.Regex.IsMatch(id, @"^[a-z0-9][a-z0-9._-]{1,63}$");
+
         public async Task<ArkUser> UpsertUser(ArkUser user)
         {
-            if (string.IsNullOrEmpty(user?.email)) throw new ApplicationException("empty email");
+            if (string.IsNullOrEmpty(user?.email)) throw new ApplicationException("a username or email is required.");
             user.email = user.email.ToLower().Trim();
-            if (!ark.net.util.EmailUtil.IsValidFormat(user.email)) throw new ApplicationException("invalid email format");
+            if (!IsValidLoginId(user.email))
+                throw new ApplicationException("invalid username - use an email address, or 2-64 characters of letters, digits, dot, dash or underscore.");
+            if (string.IsNullOrWhiteSpace(user.name)) user.name = user.email;
+            if (string.IsNullOrWhiteSpace(user.type)) user.type = "user";
             var tt = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email);
             if (tt == null)
             {
-                var usr_cl = await _ctx.user_client_claims.FirstOrDefaultAsync(t => t.email.ToLower() == user.email.ToLower());
                 user.hash_pw = string.IsNullOrEmpty(user.hash_pw) ? _util.HashPasswordPBKDF2(_util.ServerConfig.DefaultPw) : user.hash_pw; //default pw
-                user.reset_mode = true;
                 user.ref_uid = Guid.NewGuid().ToString();
-                string email_content = await _util.GetActivationEmail( _util.ServerConfig.TenantId, user.ref_uid);
-                user.emailed = await _util.SendMail(user.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Activation Link", this);
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+
+                // Only an address can be sent an activation link. A username account has no
+                // mailbox, so it starts on the configured default password instead of being
+                // parked in reset_mode waiting for a mail that can never arrive.
+                if (ark.net.util.EmailUtil.IsValidFormat(user.email))
+                {
+                    user.reset_mode = true;
+                    // Creating the account is the operation being asked for; a template that
+                    // cannot be read or an SMTP host that is down must not roll it back. The
+                    // account is left in reset_mode and `emailed` false, which is what
+                    // "Reset password" in the console retries.
+                    try
+                    {
+                        string email_content = await _util.GetActivationEmail(_util.ServerConfig.TenantId, user.ref_uid);
+                        user.emailed = await _util.SendMail(user.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Activation Link", this);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError(ex, "user_activation_email", user.email, "activation email could not be built or sent; account still created");
+                        user.emailed = false;
+                    }
+                }
+                else
+                {
+                    user.reset_mode = false;
+                    user.emailed = false;
+                }
                 _ctx.users.Add(user);
             }
             else
@@ -248,22 +365,21 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkUser> UserResetPw(ArkUser user)
         {
-            var uu = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email);
-            if (uu == null)
-            {
-                // Shouldn't be the case
-            }
-            else
-            {
-                var tnt = await _ctx.tenants.FirstOrDefaultAsync();
-                _ctx.ChangeTracker.Clear();
-                uu.reset_mode = true;
-                uu.ref_uid = Guid.NewGuid().ToString();
-                string email_content = await _util.GetActivationEmail(tnt.tenant_id, uu.ref_uid);
-                uu.emailed = await _util.SendMail(uu.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Reset Password", this);
-                uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
-                _ctx.users.Update(uu);
-            }
+            var login_id = (user?.email ?? "").ToLower().Trim();
+            var uu = await _ctx.users.FirstOrDefaultAsync(t => t.email == login_id)
+                ?? throw new ApplicationException($"unknown user '{login_id}'.");
+            // A reset link can only be delivered to an address; a username account has no mailbox.
+            if (!ark.net.util.EmailUtil.IsValidFormat(uu.email))
+                throw new ApplicationException($"'{uu.email}' is a username, not an email address - it has no mailbox to send a reset link to. Set a new password directly instead.");
+
+            var tnt = await _ctx.tenants.FirstOrDefaultAsync();
+            _ctx.ChangeTracker.Clear();
+            uu.reset_mode = true;
+            uu.ref_uid = Guid.NewGuid().ToString();
+            string email_content = await _util.GetActivationEmail(tnt.tenant_id, uu.ref_uid);
+            uu.emailed = await _util.SendMail(uu.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Reset Password", this);
+            uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+            _ctx.users.Update(uu);
             await _ctx.SaveChangesAsync();
             return uu;
         }
