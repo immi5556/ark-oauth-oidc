@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.0.0</Version>
-		<AssemblyVersion>2.0.0.0</AssemblyVersion>
-		<FileVersion>2.0.0.0</FileVersion>
+		<Version>2.0.1</Version>
+		<AssemblyVersion>2.0.1.0</AssemblyVersion>
+		<FileVersion>2.0.1.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -54,6 +54,17 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.0.1 — maintenance release.
+
+No API or protocol change over 2.0.0. Rebuilt and republished so the package on nuget.org matches
+the 2.0.0 source tree exactly, and to carry the packaging fixes below. Consumers on 2.0.0 can
+upgrade with no code change; the 2.0.0 notes apply unchanged and are kept below.
+
+Packaging: the package icon (ark_logo.png) and the readme are packed at the root of the .nupkg, so
+nuget.org and the Visual Studio package manager show both. The icon is referenced through
+PackageIcon rather than the deprecated PackageIconUrl, and is included with an empty PackagePath so
+it lands at the package root on a non-Windows build too.
+
 2.0.0 — the standards release.
 
 * Full OAuth 2.1 / OpenID Connect protocol core: discovery, JWKS with two-phase key rotation,
