@@ -1,0 +1,335 @@
+================================================================================
+ ARK OAUTH / OIDC  —  NUGET RELEASE RUNBOOK
+ Release 2.0.2   ·   verified on this Mac (darwin 25.4.0)   ·   2026-08-19
+================================================================================
+
+WHAT SHIPS IN THIS RELEASE
+--------------------------------------------------------------------------------
+  Ark.oAuth.Oidc     2.0.1  ->  2.0.2    the IdP / provider
+  Ark.oAuth.Client   2.0.1  ->  2.0.2    the ASP.NET Core client
+
+  Both were at 2.0.1 on nuget.org. The provider's csproj had been carrying
+  2.1.0 / 2.1.1 in Version and in PackageReleaseNotes, but NEITHER was ever
+  published -- nuget.org's highest version for both packages was 2.0.1, and
+  bin/Release held only 2.0.0 and 2.0.1 artifacts. Those two unpublished notes
+  sections have been merged into a single 2.0.2 entry so nothing in the notes
+  claims to have shipped when it did not.
+
+  Not part of this release: ark_oauth_client_nodejs (npm "ark-oauth-client",
+  also sitting at 2.0.1). It is published with npm, not nuget, and was left
+  untouched. Bump and publish it separately if the halves should stay aligned.
+
+  NOTE ON THE NUMBER: 2.0.2 is a patch version, but the payload is additive
+  (provisioning API, activation endpoints, a new admin console page) and needs
+  schema script 00004 (users.is_active). SemVer would call that a minor bump.
+  It publishes and resolves fine -- 2.0.2 > 2.0.1, so it becomes the latest
+  version, and no consumer is stranded because 2.1.x never existed publicly.
+
+
+TOOLCHAIN ON THIS MACHINE  (confirmed present, no install needed)
+--------------------------------------------------------------------------------
+  dotnet          10.0.101          /usr/local/share/dotnet
+                  SDKs also installed: 8.0.421, 9.0.308
+  nuget (CLI)     7.0.1.1           /opt/homebrew/bin/nuget    (not needed below)
+  mono                              /opt/homebrew/bin/mono     (not needed below)
+
+  Both packages target net9.0 and build cleanly on the 10.0.101 SDK.
+  Everything below uses `dotnet`; the standalone nuget CLI is not required.
+
+  Registered package sources (`dotnet nuget list source`):
+    1. Debug.Nuget   ./Ark.oAuth.Oidc/bin/Debug     <- local, for offline testing
+    2. nuget.org     https://api.nuget.org/v3/index.json
+
+  Ark.oAuth.Oidc/nuget.config adds the local Debug.Nuget source but does NOT
+  <clear/>, so the global nuget.org source survives. The push commands below
+  still name the source URL explicitly -- do not rely on source ordering.
+
+
+PATHS
+--------------------------------------------------------------------------------
+  REPO   /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc
+  SLN    $REPO/Ark.oAuth.Oidc/Ark.oAuth.Oidc.sln
+  IdP    $REPO/Ark.oAuth.Oidc/Ark.oAuth.Oidc/Ark.oAuth.Oidc.csproj
+  Client $REPO/Ark.oAuth.Oidc/Ark.oAuth.Client/Ark.oAuth.Client.csproj
+
+  Only those two projects are meant to be packed. Ark.oAuth.Oidc.Host,
+  Ark.oAuth.Oidc.Web, Ark.Client.Web and Ark.Auth.Client.Web all use
+  Microsoft.NET.Sdk.Web, where IsPackable defaults to false, so they are never
+  packed. Test.Csle is the exception worth knowing about: it uses the plain
+  Microsoft.NET.Sdk, where IsPackable defaults to TRUE, so `dotnet pack` on the
+  .sln would emit a junk Test.Csle.1.0.0.nupkg alongside the real ones. That is
+  the reason every pack command below names its project file explicitly instead
+  of packing the solution.
+
+  The two packages do NOT depend on each other, so push order does not matter.
+
+
+================================================================================
+ STEP 0  —  API KEY  (do this first, once per shell)
+================================================================================
+
+  Get a push-scoped key from https://www.nuget.org/account/apikeys
+  Scope it to "Push" and to the globs Ark.oAuth.Oidc and Ark.oAuth.Client.
+
+  No key is stored in this Mac's environment, so it must be supplied per push.
+  Read it in rather than typing it inline -- this keeps it out of ~/.zsh_history
+  and out of the process list:
+
+    read -rs "NUGET_API_KEY?nuget.org API key: " && export NUGET_API_KEY
+
+  Confirm it is set without printing it:
+
+    [ -n "$NUGET_API_KEY" ] && echo "key is set (${#NUGET_API_KEY} chars)"
+
+  Do NOT commit the key, and do not add it to any nuget.config in the repo.
+
+
+================================================================================
+ STEP 1  —  PREFLIGHT
+================================================================================
+
+  cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc
+
+  # 1a. Versions are what you expect (both must print 2.0.2)
+  grep -m1 "<Version>" Ark.oAuth.Oidc/Ark.oAuth.Oidc/Ark.oAuth.Oidc.csproj
+  grep -m1 "<Version>" Ark.oAuth.Oidc/Ark.oAuth.Client/Ark.oAuth.Client.csproj
+
+  # 1b. Nothing stale left pointing at the unpublished 2.1.x
+  grep -rn "2\.1\.1\|2\.1\.0" --include="*.cs" --include="*.csproj" \
+       --include="*.md" . | grep -v "/obj/\|/bin/"
+  # expect: no output
+
+  # 1c. Working tree is clean and you are on the branch you mean to release
+  git status -sb
+
+  # 1d. What is already live (2.0.2 must NOT appear -- nuget.org never allows
+  #     re-pushing a version that exists, even if it was deleted)
+  curl -s https://api.nuget.org/v3-flatcontainer/ark.oauth.oidc/index.json   | tail -5
+  curl -s https://api.nuget.org/v3-flatcontainer/ark.oauth.client/index.json | tail -5
+
+
+================================================================================
+ STEP 2  —  COMMIT THE VERSION BUMP BEFORE PACKING
+================================================================================
+
+  This matters and is easy to get wrong. Source Link stamps the CURRENT HEAD
+  commit into the nuspec <repository commit="..."/>. Pack before committing and
+  the published package points at the pre-bump commit, so anyone stepping into
+  the symbols gets source that does not match the release.
+
+  git add Ark.oAuth.Oidc/Ark.oAuth.Oidc/Ark.oAuth.Oidc.csproj \
+          Ark.oAuth.Oidc/Ark.oAuth.Client/Ark.oAuth.Client.csproj \
+          Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md \
+          Ark.oAuth.Oidc/Ark.oAuth.Oidc/Api/MigrationController.cs
+  git commit -m "release 2.0.2"
+
+  Then re-pack in STEP 4 so the artifacts carry this commit.
+
+
+================================================================================
+ STEP 3  —  CLEAN AND BUILD
+================================================================================
+
+  cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/Ark.oAuth.Oidc
+
+  # 3a. Clear old Release output. Both projects have GeneratePackageOnBuild=true,
+  #     so bin/Release accumulates a .nupkg per version ever built -- clean first
+  #     or STEP 6's glob will pick up 2.0.0 and 2.0.1 and try to push them too.
+  rm -f Ark.oAuth.Oidc/bin/Release/*.nupkg  Ark.oAuth.Oidc/bin/Release/*.snupkg
+  rm -f Ark.oAuth.Client/bin/Release/*.nupkg Ark.oAuth.Client/bin/Release/*.snupkg
+
+  dotnet clean Ark.oAuth.Oidc.sln -c Release
+
+  # 3b. Restore and build
+  dotnet restore Ark.oAuth.Oidc.sln
+
+  dotnet build Ark.oAuth.Oidc/Ark.oAuth.Oidc.csproj   -c Release
+  dotnet build Ark.oAuth.Client/Ark.oAuth.Client.csproj -c Release
+
+  Treat any NU5046 (icon/readme missing from package) or CS error as a stop.
+  CS1591 (missing XML doc) is suppressed on purpose in both csproj files.
+
+
+================================================================================
+ STEP 4  —  PACK
+================================================================================
+
+  cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/Ark.oAuth.Oidc
+
+  dotnet pack Ark.oAuth.Oidc/Ark.oAuth.Oidc.csproj     -c Release
+  dotnet pack Ark.oAuth.Client/Ark.oAuth.Client.csproj -c Release
+
+  Expected output (this exact run was verified):
+    Ark.oAuth.Oidc/bin/Release/Ark.oAuth.Oidc.2.0.2.nupkg
+    Ark.oAuth.Oidc/bin/Release/Ark.oAuth.Oidc.2.0.2.snupkg
+    Ark.oAuth.Client/bin/Release/Ark.oAuth.Client.2.0.2.nupkg
+    Ark.oAuth.Client/bin/Release/Ark.oAuth.Client.2.0.2.snupkg
+
+  Because GeneratePackageOnBuild=true, STEP 3b already produced these; the pack
+  calls are the explicit, idempotent way to get them and cost nothing extra.
+
+
+================================================================================
+ STEP 5  —  VERIFY THE ARTIFACTS BEFORE PUSHING
+================================================================================
+
+  A push cannot be undone -- a version number is burned forever once accepted.
+  Check the payload first. All four checks below passed on this build.
+
+  # 5a. Package contents. Expect exactly: the nuspec, lib/net9.0/<name>.dll,
+  #     lib/net9.0/<name>.xml, ark_logo.png and README.md at the package root.
+  unzip -l Ark.oAuth.Oidc/bin/Release/Ark.oAuth.Oidc.2.0.2.nupkg
+  unzip -l Ark.oAuth.Client/bin/Release/Ark.oAuth.Client.2.0.2.nupkg
+
+  # 5b. No application content leaking into consumers. Must print 0 for both.
+  #     This is what StaticWebAssetsEnabled=false plus the Content Remove items
+  #     are there to guarantee; a regression here ships appsettings/wwwroot into
+  #     every project that references the package.
+  for f in Ark.oAuth.Oidc/bin/Release/Ark.oAuth.Oidc.2.0.2.nupkg \
+           Ark.oAuth.Client/bin/Release/Ark.oAuth.Client.2.0.2.nupkg; do
+    echo -n "$f -> "
+    unzip -l "$f" | grep -icE "content/|contentFiles/|staticwebassets"
+  done
+
+  # 5c. Nuspec metadata: version, icon, readme, and the Source Link commit
+  #     (the commit must be the "release 2.0.2" commit from STEP 2).
+  cd /tmp && rm -rf nsp && mkdir nsp && cd nsp
+  unzip -o -q /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/Ark.oAuth.Oidc/Ark.oAuth.Oidc/bin/Release/Ark.oAuth.Oidc.2.0.2.nupkg Ark.oAuth.Oidc.nuspec
+  grep -E "<(id|version|icon|readme|license)|<repository" Ark.oAuth.Oidc.nuspec
+  cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/Ark.oAuth.Oidc
+
+  # 5d. Optional but recommended: install the built package into a scratch app
+  #     from the local Debug.Nuget-style folder feed and confirm it restores.
+  #     (Catches a broken dependency graph before it is public.)
+  #     dotnet new web -o /tmp/arktest && cd /tmp/arktest
+  #     dotnet add package Ark.oAuth.Oidc -v 2.0.2 \
+  #       -s /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/Ark.oAuth.Oidc/Ark.oAuth.Oidc/bin/Release
+
+
+================================================================================
+ STEP 6  —  PUSH TO NUGET.ORG
+================================================================================
+
+  cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/Ark.oAuth.Oidc
+
+  # The provider
+  dotnet nuget push Ark.oAuth.Oidc/bin/Release/Ark.oAuth.Oidc.2.0.2.nupkg \
+    --api-key "$NUGET_API_KEY" \
+    --source https://api.nuget.org/v3/index.json \
+    --skip-duplicate
+
+  # The client
+  dotnet nuget push Ark.oAuth.Client/bin/Release/Ark.oAuth.Client.2.0.2.nupkg \
+    --api-key "$NUGET_API_KEY" \
+    --source https://api.nuget.org/v3/index.json \
+    --skip-duplicate
+
+  Notes on these two commands:
+
+  * SYMBOLS GO AUTOMATICALLY. Pushing X.nupkg also pushes X.snupkg when it sits
+    in the same directory. Do not push the .snupkg as a separate command -- that
+    is what produces a confusing 409 on the symbol package. Pass --no-symbols to
+    suppress it deliberately.
+
+  * --skip-duplicate turns "this version already exists" (HTTP 409) into a
+    warning instead of a failed command. Useful when re-running after a partial
+    push; it does NOT overwrite anything.
+
+  * Point --source at the v3 index URL, not at the "nuget.org" source name, so
+    the push cannot be diverted by the repo-local nuget.config.
+
+  * Expect "Your package was pushed." Indexing and validation on nuget.org then
+    take a few minutes to about 15 before the version is installable, and the
+    symbol package is validated separately and can lag further.
+
+
+================================================================================
+ STEP 7  —  CONFIRM IT WENT LIVE
+================================================================================
+
+  # 2.0.2 should appear at the end of each list (allow a few minutes)
+  curl -s https://api.nuget.org/v3-flatcontainer/ark.oauth.oidc/index.json   | tail -5
+  curl -s https://api.nuget.org/v3-flatcontainer/ark.oauth.client/index.json | tail -5
+
+  # Restore it for real from nuget.org only, bypassing any local cache
+  dotnet nuget locals http-cache --clear
+  cd /tmp && rm -rf arkverify && dotnet new classlib -o arkverify && cd arkverify
+  dotnet add package Ark.oAuth.Oidc   -v 2.0.2 -s https://api.nuget.org/v3/index.json
+  dotnet add package Ark.oAuth.Client -v 2.0.2 -s https://api.nuget.org/v3/index.json
+
+  Also eyeball the listing pages -- the icon, README and release notes should
+  all render:
+    https://www.nuget.org/packages/Ark.oAuth.Oidc/2.0.2
+    https://www.nuget.org/packages/Ark.oAuth.Client/2.0.2
+
+
+================================================================================
+ STEP 8  —  TAG AND PUSH THE SOURCE
+================================================================================
+
+  cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc
+
+  git tag -a v2.0.2 -m "Ark.oAuth.Oidc / Ark.oAuth.Client 2.0.2"
+  git push origin oauth-update
+  git push origin v2.0.2
+
+  The repo currently has no tags at all, so v2.0.2 starts that convention.
+  If 2.0.2 is meant to be released off main, merge oauth-update into main first
+  and tag the merge commit instead -- the csproj files declare
+  RepositoryBranch=main, so Source Link advertises main either way.
+
+
+================================================================================
+ IF SOMETHING GOES WRONG
+================================================================================
+
+  A pushed version can never be replaced. Options, in order of preference:
+
+  1. Unlist it (hides it from search and from the version dropdown; existing
+     consumers who pin it can still restore it):
+       dotnet nuget delete Ark.oAuth.Oidc 2.0.2 \
+         --api-key "$NUGET_API_KEY" \
+         --source https://api.nuget.org/v3/index.json \
+         --non-interactive
+     On nuget.org "delete" IS unlist -- the bits stay available. Confirm on the
+     package page that it shows as unlisted.
+
+  2. Ship 2.0.3. This is the normal fix. Bump both csproj version triples,
+     add a notes entry, and repeat from STEP 1.
+
+  3. Genuine hard delete (leaked secret, license problem) requires contacting
+     nuget.org support; it is not something this CLI can do.
+
+  Common failures:
+
+  * 403 Forbidden          key is expired, not push-scoped, or its glob does not
+                           cover the package id. Regenerate on nuget.org.
+  * 409 Conflict           that version already exists. Bump; do not fight it.
+  * NU5046 icon missing    the icon must be packed with an EMPTY PackagePath.
+                           PackagePath="\" is taken literally on macOS and lands
+                           the file in a directory named "\". Both csproj files
+                           already do this correctly -- do not "fix" them.
+  * NU1701 / graph errors  Microsoft.IdentityModel.* must stay aligned at 8.8.0
+                           across JsonWebTokens, Protocols.OpenIdConnect and
+                           System.IdentityModel.Tokens.Jwt. A split graph builds
+                           fine and then fails at the first OIDC challenge with
+                           "Cannot redirect to the authorization endpoint".
+
+
+================================================================================
+ ONE-SHOT SEQUENCE  (after STEP 0 and STEP 2 are done, and STEP 5 reviewed)
+================================================================================
+
+  cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/Ark.oAuth.Oidc && \
+  rm -f Ark.oAuth.Oidc/bin/Release/*.nupkg Ark.oAuth.Oidc/bin/Release/*.snupkg \
+        Ark.oAuth.Client/bin/Release/*.nupkg Ark.oAuth.Client/bin/Release/*.snupkg && \
+  dotnet clean Ark.oAuth.Oidc.sln -c Release && \
+  dotnet restore Ark.oAuth.Oidc.sln && \
+  dotnet pack Ark.oAuth.Oidc/Ark.oAuth.Oidc.csproj -c Release && \
+  dotnet pack Ark.oAuth.Client/Ark.oAuth.Client.csproj -c Release && \
+  dotnet nuget push Ark.oAuth.Oidc/bin/Release/Ark.oAuth.Oidc.2.0.2.nupkg \
+    --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate && \
+  dotnet nuget push Ark.oAuth.Client/bin/Release/Ark.oAuth.Client.2.0.2.nupkg \
+    --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+================================================================================

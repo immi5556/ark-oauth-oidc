@@ -26,9 +26,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.0.1</Version>
-		<AssemblyVersion>2.0.1.0</AssemblyVersion>
-		<FileVersion>2.0.1.0</FileVersion>
+		<Version>2.0.2</Version>
+		<AssemblyVersion>2.0.2.0</AssemblyVersion>
+		<FileVersion>2.0.2.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -50,6 +50,12 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.0.2 — version alignment.
+
+No API change over 2.0.1. Rebuilt and republished alongside Ark.oAuth.Oidc 2.0.2 so the two halves
+carry the same version. Consumers on 2.0.1 can upgrade with no code change; the 2.0.1 and 2.0.0
+notes apply unchanged and are kept below.
+
 2.0.1 — maintenance release.
 
 No API change over 2.0.0. Rebuilt and republished alongside Ark.oAuth.Oidc 2.0.1 to keep the two

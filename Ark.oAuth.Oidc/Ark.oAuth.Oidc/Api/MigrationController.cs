@@ -7,7 +7,7 @@
  *    rollback url  : auth/api/migration/v1/sql/?action=down&name=00002_sql.sql
  *    details: created new ark_status table to get user retry attempt
  *
- * Since 2.1.1 these run by themselves: AddArkOidcServer's bootstrap applies every script the
+ * Since 2.0.2 these run by themselves: AddArkOidcServer's bootstrap applies every script the
  * database has not had yet and records it in ark_schema_history, so this endpoint is only needed
  * to roll one back, or to drive a provider whose scripts are not embedded here. See
  * ArkSchemaUpdater.

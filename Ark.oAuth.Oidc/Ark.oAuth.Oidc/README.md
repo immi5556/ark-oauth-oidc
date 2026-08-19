@@ -292,7 +292,7 @@ applies every script the database has not had yet and records it in `ark_schema_
 
 ```
 00003_sql.sql   # 2.0.0 - protocol tables, RFC 7591 metadata
-00004_sql.sql   # 2.1.0 - users.is_active
+00004_sql.sql   # 2.0.2 - users.is_active
 ```
 
 Nothing is ever replayed. A database that predates the history table is measured rather than

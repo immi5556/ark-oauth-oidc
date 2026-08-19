@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.1.1</Version>
-		<AssemblyVersion>2.1.1.0</AssemblyVersion>
-		<FileVersion>2.1.1.0</FileVersion>
+		<Version>2.0.2</Version>
+		<AssemblyVersion>2.0.2.0</AssemblyVersion>
+		<FileVersion>2.0.2.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -54,31 +54,7 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
-2.1.1 — schema updates apply themselves, and the console gets a provisioning page.
-
-* **Pending schema scripts run on start-up.** The scripts in Migration/{provider}/up were an
-  operator's job after every upgrade, and skipping one failed quietly and specifically: without
-  00004 the entity carried users.is_active and the table did not, so /api/oauth/v1/user/list
-  answered a bare 500 and the console's Users grid came up empty with nothing saying why. The
-  bootstrap now applies what is pending and records it in ark_schema_history.
-* **Nothing is replayed.** A database that predates the history table is measured rather than
-  replayed: each script is checked against the live schema and one whose tables and columns are all
-  present is recorded as a baseline without executing. 00003 rewrites every client that holds no
-  secret — right for a 2.0.0 upgrade, wrong for anything after it — so that distinction is the
-  whole point. A database created by EnsureCreated on this version records all four and runs none.
-* The management API's list endpoints report a failure as { error, msg } like every other endpoint
-  instead of an empty 500, and /api/migration/v1/sql now reports whether the script it ran actually
-  worked rather than always answering "executed".
-* **Provisioning and Activation moved to their own console page**, /{tenant}/admin/provisioning,
-  linked from a navigation bar in the console's top bar and restricted to the administrator
-  account (AdminUser:Username, or a principal carrying an "admin" claim). Activation gained a form
-  stating the request itself, above the two lists.
-* **The page writes the curl for you.** Fill either form in and the equivalent command appears,
-  carrying the values that are in the forms — the provisioning body, the activation body, and a
-  client_credentials token step. The secret is the one thing the page cannot read back, so a button
-  mints a new one for the machine client and drops it straight into the command.
-
-2.1.0 — provisioning, activation and branding.
+2.0.2 — provisioning, activation, branding, and self-applying schema updates.
 
 * **Provisioning API.** POST /api/oauth/v1/provision/client registers an application, creates or
   reuses a user, and adds the user-client access mapping in one call. An existing client name is
@@ -96,8 +72,24 @@
   Both only after the password has been verified, so the single deliberately-vague message for
   every credentials failure — and with it the page's resistance to account enumeration — is
   unchanged.
-* **Two new console panels**: Provision an application, and Activation (both switches side by
-  side, with the state of every client and account visible at once).
+* **Pending schema scripts run on start-up.** The scripts in Migration/{provider}/up were an
+  operator's job after every upgrade, and skipping one failed quietly and specifically: without
+  00004 the entity carried users.is_active and the table did not, so /api/oauth/v1/user/list
+  answered a bare 500 and the console's Users grid came up empty with nothing saying why. The
+  bootstrap now applies what is pending and records it in ark_schema_history.
+* **Nothing is replayed.** A database that predates the history table is measured rather than
+  replayed: each script is checked against the live schema and one whose tables and columns are all
+  present is recorded as a baseline without executing. 00003 rewrites every client that holds no
+  secret — right for a 2.0.0 upgrade, wrong for anything after it — so that distinction is the
+  whole point. A database created by EnsureCreated on this version records all four and runs none.
+* **Provisioning and Activation have their own console page**, /{tenant}/admin/provisioning, linked
+  from a navigation bar in the console's top bar and restricted to the administrator account
+  (AdminUser:Username, or a principal carrying an "admin" claim). It carries the provisioning form,
+  both activation switches, and the state of every client and account at once.
+* **The page writes the curl for you.** Fill either form in and the equivalent command appears,
+  carrying the values that are in the forms — the provisioning body, the activation body, and a
+  client_credentials token step. The secret is the one thing the page cannot read back, so a button
+  mints a new one for the machine client and drops it straight into the command.
 * **Client logos.** Uploaded in the client editor or at provisioning time and inlined as a data
   URI, so nothing has to be hosted. The sign-in page header now carries the host logo and the
   client logo together, and lays itself out for two marks, one, or none — the previous header
@@ -109,11 +101,13 @@
   the token-exchange command for the code that comes back.
 * The interactive pages now send Content-Security-Policy: frame-ancestors 'self' — clickjacking
   protection they did not have, and what lets the setup page frame the authorization endpoint.
+* The management API's list endpoints report a failure as { error, msg } like every other endpoint
+  instead of an empty 500, and /api/migration/v1/sql now reports whether the script it ran actually
+  worked rather than always answering "executed".
 
 Migration: existing databases need 00004, which adds users.is_active. It is one additive, defaulted
-column, so every existing account stays active. As of 2.1.1 it is applied on start-up; on 2.1.0 run
-it by hand with GET /api/migration/v1/sql?action=up&amp;name=00004_sql.sql. A database created by
-this version already has it.
+column, so every existing account stays active. This version applies it on start-up, so there is
+nothing to run by hand, and a database created by this version already has it.
 
 2.0.1 — maintenance release.
 
