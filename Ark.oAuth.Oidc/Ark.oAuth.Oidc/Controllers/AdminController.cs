@@ -1,4 +1,4 @@
-using Ark.oAuth.Oidc.Protocol;
+﻿using Ark.oAuth.Oidc.Protocol;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -49,9 +49,58 @@ namespace Ark.oAuth.Oidc.Controllers
         [HttpGet("/{tenant_id}/admin")]
         public async Task<IActionResult> Manage([FromRoute] string tenant_id)
         {
-            var ser = ServerConfig;
             var tenant = await _da.GetTenant(tenant_id);
             if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
+            BuildConsoleView(tenant, "console");
+            return View();
+        }
+
+        /// <summary>
+        /// Onboarding: provision an application, and switch applications or accounts off and on.
+        ///
+        /// A page of its own rather than two more panels on the console, because these two are the
+        /// only operations there that are not "edit a row" — they create an application and its
+        /// user in one call, and they revoke sessions and refresh tokens. Both are worth reaching
+        /// deliberately rather than scrolling past on the way to the scope catalogue.
+        ///
+        /// Restricted to the operator account (see <see cref="IsOperator"/>). That is a narrowing
+        /// of the console's own model, where every signed-in user is a global operator over every
+        /// tenant — the link is hidden for everybody else and the route refuses them, so this page
+        /// does not become the way an ordinary console user discovers it.
+        /// </summary>
+        [HttpGet("/{tenant_id}/admin/provisioning")]
+        public async Task<IActionResult> Provisioning([FromRoute] string tenant_id)
+        {
+            var tenant = await _da.GetTenant(tenant_id);
+            if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
+            if (!IsOperator())
+                return StatusCode(403, "Provisioning and activation are restricted to the administrator account.");
+
+            BuildConsoleView(tenant, "provisioning");
+
+            // The machine-to-machine client seeded beside the console. It is what the generated
+            // curl authenticates as, so the page needs its client_id and whether it can hold a
+            // secret at all — a public client cannot run client_credentials.
+            var machine = await _da.GetClient(tenant.tenant_id, $"{ServerConfig.TenantId}_machine");
+            ViewBag.MachineClientId = machine?.client_id ?? "";
+            ViewBag.MachineHasSecret = !string.IsNullOrEmpty(machine?.client_secret_hash);
+
+            // Absolute, and taken from the same builder the discovery document uses — a command
+            // meant to be pasted into somebody else's shell cannot be built from
+            // window.location, which is whatever address this particular browser happened to
+            // reach the server on.
+            var ep = ArkOidcEndpoints.For(Request, ServerConfig, tenant.tenant_id);
+            ViewBag.TokenEndpoint = ep.Token;
+            ViewBag.ApiRoot = $"{ep.BaseUrl}/api/oauth/v1";
+            return View();
+        }
+
+        /// <summary>
+        /// The view data both console pages share: branding, endpoints, asset URLs and identity.
+        /// </summary>
+        private void BuildConsoleView(ArkTenant tenant, string page)
+        {
+            var ser = ServerConfig;
 
             var endpoints = ArkOidcEndpoints.For(Request, ser, tenant.tenant_id);
 
@@ -87,7 +136,47 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.UserName = string.IsNullOrWhiteSpace(name) ? (email ?? "signed in") : name;
             ViewBag.UserEmail = email ?? "";
 
-            return View();
+            // Which page is being drawn, and what the nav should offer. The provisioning link is
+            // drawn only for the operator: a link that answers 403 is worse than no link.
+            ViewBag.Page = page;
+            ViewBag.IsOperator = IsOperator();
+            ViewBag.ConsoleUrl = $"{appRoot}/{tenant.tenant_id}/admin";
+            ViewBag.ProvisioningUrl = $"{appRoot}/{tenant.tenant_id}/admin/provisioning";
+        }
+
+        /// <summary>
+        /// Whether the signed-in principal is the operator account.
+        ///
+        /// Two ways to be one, because there are two ways deployments describe it:
+        ///
+        ///   * the account named by <c>ark_oauth_server:AdminUser:Username</c> — the one seeded
+        ///     when the database was created, matched against whichever of sub / email /
+        ///     preferred_username the host's handler put on the principal;
+        ///   * an <c>admin</c> authorization claim, which arrives as a role because the Ark client
+        ///     projects <c>ark_claims</c> onto the configured role claim type. That is how an
+        ///     operator who is not the seeded account gets in, without a second setting.
+        ///
+        /// Deliberately not a claim on the access token alone: the seeded administrator has no
+        /// "admin" claim on it, and locking the page to a claim nobody has yet would make it
+        /// unreachable on every existing deployment.
+        /// </summary>
+        private bool IsOperator()
+        {
+            if (User?.Identity?.IsAuthenticated != true) return false;
+
+            var admin = ServerConfig.AdminUser?.Username;
+            if (!string.IsNullOrWhiteSpace(admin))
+            {
+                foreach (var type in new[] { "sub", "email", "preferred_username", System.Security.Claims.ClaimTypes.Name })
+                {
+                    var value = User.FindFirst(type)?.Value;
+                    if (!string.IsNullOrWhiteSpace(value) &&
+                        string.Equals(value.Trim(), admin.Trim(), StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+
+            return User.IsInRole("admin") || User.IsInRole("ark_admin");
         }
 
         // ------------------------------------------------------------------ static assets

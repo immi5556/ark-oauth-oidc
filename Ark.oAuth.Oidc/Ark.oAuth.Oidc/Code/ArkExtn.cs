@@ -264,6 +264,13 @@ namespace Ark.oAuth.Oidc
                             dbContext.SaveChanges();
                         }
 
+                        // Schema updates for a database that already exists. Additive scripts
+                        // only, recorded so none of them runs twice — see ArkSchemaUpdater. This
+                        // used to be an operator's job after every upgrade, and skipping it left
+                        // the entities describing columns the tables did not have: the management
+                        // API then answered a bare 500 that named nothing.
+                        ApplySchemaUpdates(scope.ServiceProvider);
+
                         ReconcileAdminConsoleClient(scope.ServiceProvider);
                         ReconcileScopeCatalogue(scope.ServiceProvider);
                         ReconcileMachineClient(scope.ServiceProvider);
@@ -407,6 +414,34 @@ namespace Ark.oAuth.Oidc
 
             dbContext.scopes.AddRange(missing);
             dbContext.SaveChanges();
+        }
+
+        /// <summary>
+        /// Runs the schema scripts this build needs and the database has not had yet.
+        ///
+        /// Reported through the audit trail rather than thrown away, because "the console shows
+        /// no users" and "00004 was never run" have to be connectable after the fact. A failure
+        /// is fatal for the bootstrap on purpose: the alternative is a process serving requests
+        /// against a schema its entities do not match, which is the exact failure this removes.
+        /// </summary>
+        private static void ApplySchemaUpdates(IServiceProvider services)
+        {
+            var da = services.GetRequiredService<DataAccess>();
+            try
+            {
+                var result = ArkSchemaUpdater.Apply(services.GetRequiredService<ArkDataContext>());
+                if (result.Applied.Count > 0)
+                    da.Log("schema_update", string.Join(", ", result.Applied),
+                        $"{result.Applied.Count} schema script(s) applied", "");
+                if (result.Baselined.Count > 0)
+                    da.Log("schema_baseline", string.Join(", ", result.Baselined),
+                        "schema already current; scripts recorded without running", "");
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "schema_update", "ArkSchemaUpdater.Apply", "schema update failed");
+                throw;
+            }
         }
 
         /// <summary>

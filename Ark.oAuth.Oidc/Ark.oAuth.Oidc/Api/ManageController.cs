@@ -12,29 +12,42 @@ namespace Ark.oAuth.Oidc
         [Route("v1/tenant/list")]
         public async Task<dynamic> TenantList([FromServices] DataAccess da)
         {
-            var tenants = await da.GetTenants();
-            return new
+            try
             {
-                error = false,
-                msg = "tenatns list loaded.",
-                // rsa_private is deliberately not projected. This response is read by a page in a
-                // browser, so returning it published every tenant's *signing* key to the client —
-                // anything that can read the DOM or the response cache could then mint tokens the
-                // server would accept. Nothing needs it: the console renders only a
-                // present/absent badge off rsa_public, and an upsert that omits the pair is
-                // treated as "leave the key alone".
-                data = tenants.Select(t => new
+                var tenants = await da.GetTenants();
+                return new
                 {
-                    t.tenant_id,
-                    t.name,
-                    t.display,
-                    t.rsa_public,
-                    t.issuer,
-                    t.audience,
-                    t.expire_mins,
-                    t.at
-                })
-            };
+                    error = false,
+                    msg = "tenatns list loaded.",
+                    // rsa_private is deliberately not projected. This response is read by a page in a
+                    // browser, so returning it published every tenant's *signing* key to the client —
+                    // anything that can read the DOM or the response cache could then mint tokens the
+                    // server would accept. Nothing needs it: the console renders only a
+                    // present/absent badge off rsa_public, and an upsert that omits the pair is
+                    // treated as "leave the key alone".
+                    data = tenants.Select(t => new
+                    {
+                        t.tenant_id,
+                        t.name,
+                        t.display,
+                        t.rsa_public,
+                        t.issuer,
+                        t.audience,
+                        t.expire_mins,
+                        t.at
+                    })
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "tenant_list", "v1/tenant/list", "loading the tenant list failed");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = new List<ArkTenant>()
+                };
+            }
         }
         [HttpPost]
         [Route("v1/tenant/upsert")]
@@ -85,12 +98,25 @@ namespace Ark.oAuth.Oidc
         [Route("v1/client/list")]
         public async Task<dynamic> ClientList([FromServices] DataAccess da)
         {
-            return new
+            try
             {
-                error = false,
-                msg = "clients list loaded.",
-                data = await da.GetClients()
-            };
+                return new
+                {
+                    error = false,
+                    msg = "clients list loaded.",
+                    data = await da.GetClients()
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "client_list", "v1/client/list", "loading the clients list failed");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = new List<ArkClient>()
+                };
+            }
         }
         [HttpPost]
         [Route("v1/client/upsert")]
@@ -189,12 +215,25 @@ namespace Ark.oAuth.Oidc
         [Route("v1/claim/list")]
         public async Task<dynamic> ClaimsList([FromServices] DataAccess da)
         {
-            return new
+            try
             {
-                error = false,
-                msg = "claims list loaded.",
-                data = await da.GetClaims()
-            };
+                return new
+                {
+                    error = false,
+                    msg = "claims list loaded.",
+                    data = await da.GetClaims()
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "claim_list", "v1/claim/list", "loading the claims list failed");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = new List<ArkClaim>()
+                };
+            }
         }
         [HttpPost]
         [Route("v1/claim/upsert")]
@@ -249,12 +288,25 @@ namespace Ark.oAuth.Oidc
         [Route("v1/scope/list")]
         public async Task<dynamic> ScopeList([FromServices] DataAccess da)
         {
-            return new
+            try
             {
-                error = false,
-                msg = "scopes list loaded.",
-                data = await da.GetScopes()
-            };
+                return new
+                {
+                    error = false,
+                    msg = "scopes list loaded.",
+                    data = await da.GetScopes()
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "scope_list", "v1/scope/list", "loading the scopes list failed");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = new List<ArkScope>()
+                };
+            }
         }
         [HttpPost]
         [Route("v1/scope/upsert")]
@@ -308,25 +360,61 @@ namespace Ark.oAuth.Oidc
                 };
             }
         }
+        /// <summary>
+        /// Every account on the server.
+        ///
+        /// Wrapped, like the writes above, because the one failure this endpoint actually has is
+        /// a schema behind the entities — a database that never ran the script adding
+        /// "users"."is_active" throws here on the SELECT itself. Unhandled, that is a 500 with no
+        /// body: the console's grid comes up empty and neither the operator nor the audit trail
+        /// is told why. Start-up now applies pending scripts on its own (see ArkSchemaUpdater),
+        /// so this is the second line of defence rather than the first.
+        /// </summary>
         [Route("v1/user/list")]
         public async Task<dynamic> UserList([FromServices] DataAccess da)
         {
-            return new
+            try
             {
-                error = false,
-                msg = "users list loaded.",
-                data = await da.GetUsers()
-            };
+                return new
+                {
+                    error = false,
+                    msg = "users list loaded.",
+                    data = await da.GetUsers()
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "user_list", "v1/user/list", "loading the user list failed");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = new List<ArkUser>()
+                };
+            }
         }
         [Route("v1/user/list/client/claims/mapping/{email}/{ten_id}")]
         public async Task<dynamic> UserClientCLaimsList([FromRoute] string email, [FromRoute] string ten_id, [FromServices] DataAccess da)
         {
-            return new
+            try
             {
-                error = false,
-                msg = $"users mapping list loaded.",
-                data = await da.GetUsersClientClaims(email, ten_id)
-            };
+                return new
+                {
+                    error = false,
+                    msg = $"users mapping list loaded.",
+                    data = await da.GetUsersClientClaims(email, ten_id)
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "user_mapping_list", "v1/user/list/client/claims/mapping", $"details : e: {email}, ti: {ten_id}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = new List<ArkUserClientClaim>()
+                };
+            }
         }
         [HttpPost]
         [Route("v1/user/client/claims/upsert")]

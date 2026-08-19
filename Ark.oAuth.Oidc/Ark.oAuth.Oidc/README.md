@@ -206,7 +206,10 @@ given their second application.
 A user this call creates gets `ark_oauth_server:DefaultPw` and can sign in immediately. Set
 `send_activation_email` to email a link instead; the account then cannot sign in until it is used.
 
-The console's **Provision an application** panel is this endpoint with a form in front of it.
+The console's **Provision an application** panel — on the administrator's *Provisioning* page,
+linked from the console's own navigation — is this endpoint with a form in front of it. Fill the
+form in and the page shows the same call as a `curl` command, with the values you typed already
+in it.
 
 ## Deactivating a user or a client
 
@@ -226,8 +229,10 @@ loses their sessions *and* their refresh tokens — because otherwise the switch
 effect until they expired, up to fourteen days later. Access tokens already issued are
 self-contained and remain valid until they expire, which is the usual bound on revoking a JWT.
 
-The console's **Activation** panel shows both lists side by side. Both endpoints and both panels
-need the same authorization as the rest of the management API.
+The console's **Activation** panel — on the same *Provisioning* page — states the request as a
+form and lists every client and account with its current state below it. Both endpoints need the
+same authorization as the rest of the management API; the page itself is restricted to the
+administrator account (`AdminUser:Username`, or a principal carrying an `admin` claim).
 
 ## Admin console
 
@@ -282,15 +287,27 @@ a caption under an empty space. The admin console's top bar draws the same locku
 
 ## Upgrading an existing database
 
-Schema changes ship as numbered scripts, applied through the migration endpoint:
+Schema changes ship as numbered scripts, and **they now run themselves**: on start-up the server
+applies every script the database has not had yet and records it in `ark_schema_history`.
 
 ```
-GET /api/migration/v1/sql?action=up&name=00003_sql.sql   # 2.0.0 - protocol tables, RFC 7591 metadata
-GET /api/migration/v1/sql?action=up&name=00004_sql.sql   # 2.1.0 - users.is_active
+00003_sql.sql   # 2.0.0 - protocol tables, RFC 7591 metadata
+00004_sql.sql   # 2.1.0 - users.is_active
 ```
 
-00004 adds one additive, defaulted column, so every existing account stays active. A database
-created by 2.1.0 already has it and needs neither script.
+Nothing is ever replayed. A database that predates the history table is measured rather than
+replayed — each script is checked against the live schema, and one whose tables and columns are all
+present is recorded as a baseline without executing. That matters because 00003 rewrites every
+client that holds no secret, which is right for a 2.0.0 upgrade and wrong for anything else.
+
+Skipping this used to be silent and specific: without 00004 the entity carried `users.is_active`
+and the table did not, so `/api/oauth/v1/user/list` answered a bare 500 and the console's Users
+grid came up empty with nothing saying why.
+
+Only the SQLite scripts ship in this package. On MySQL, PostgreSQL or SQL Server there is nothing
+to run automatically and the `ALTER TABLE` is still yours to apply. `GET
+/api/migration/v1/sql?action=up|down&name=00004_sql.sql` is still there to run or roll back one by
+hand, and now reports whether it actually worked instead of always answering "executed".
 
 ## Before production
 

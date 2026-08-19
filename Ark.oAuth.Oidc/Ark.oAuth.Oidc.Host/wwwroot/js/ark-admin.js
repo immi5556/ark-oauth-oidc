@@ -16,6 +16,13 @@
        depend on JSON property order to be interpreted correctly.
      * No third-party helper libraries. Tabulator is the single external
        dependency, pinned; the toast and DOM helpers below are ~20 lines.
+
+   One script, two pages. The console (/{tenant}/admin) and the provisioning page
+   (/{tenant}/admin/provisioning) share it, and neither draws all of it, so every
+   section here is wired only when the elements it drives are actually present —
+   see byId/on/fillSelect below. A section that binds blindly throws on the page
+   that does not have it, which stops the script before the sections that page
+   does have have been wired at all.
    --------------------------------------------------------------------------- */
 (function () {
     "use strict";
@@ -23,9 +30,41 @@
     var root = document.getElementById("ark-admin");
     var APP_ROOT = root.dataset.appRoot || "";
     var TENANT_ID = root.dataset.tenantId || "";
+    var PAGE = root.dataset.page || "console";
     var API = APP_ROOT + "/api/oauth/v1";
 
     // ---------------------------------------------------------------- helpers
+
+    function byId(id) { return document.getElementById(id); }
+
+    /** Binds an event only if the element is on this page. Returns the element, or null. */
+    function on(id, event, handler) {
+        var element = byId(id);
+        if (element) element.addEventListener(event, handler);
+        return element;
+    }
+
+    /**
+     * Repopulates a select, keeping the current selection when it still exists.
+     *
+     * Several selects are filled from the same three lists on both pages, and the load functions
+     * run again after every save — rebuilding them by hand each time is how one of them ends up
+     * silently resetting to its first option while the operator is looking at another panel.
+     */
+    function fillSelect(id, options, fallback, placeholder) {
+        var select = byId(id);
+        if (!select) return null;
+        var current = select.value;
+        select.innerHTML = "";
+        if (placeholder) select.add(new Option(placeholder, ""));
+        options.forEach(function (o) { select.add(new Option(o.label, o.value)); });
+        var wanted = current || fallback || "";
+        select.value = wanted;
+        // A selection that no longer exists leaves value "" — which is the placeholder when there
+        // is one, and the first real option when there is not.
+        if (select.value !== wanted && !placeholder && select.options.length) select.selectedIndex = 0;
+        return select;
+    }
 
     function toast(kind, message, ms) {
         var host = document.getElementById("ark-toasts");
@@ -265,7 +304,7 @@
         return getJson(API + "/tenant/list").then(function (res) {
             state.tenants = res.data || [];
 
-            if (!tables.tenant) {
+            if (byId("tbl_tenant") && !tables.tenant) {
                 tables.tenant = new Tabulator("#tbl_tenant", {
                     data: state.tenants,
                     layout: "fitColumns",
@@ -305,22 +344,16 @@
                         }
                     ]
                 });
-            } else {
+            } else if (tables.tenant) {
                 tables.tenant.setData(state.tenants);
             }
 
-            var sel = document.getElementById("sel-tenant");
-            var current = sel.value;
-            sel.innerHTML = "";
-            sel.add(new Option("Select tenant", ""));
-            state.tenants.forEach(function (t) { sel.add(new Option(t.name || t.tenant_id, t.tenant_id)); });
-            sel.value = current || TENANT_ID;
-
-            var pv = document.getElementById("pv-tenant_id");
-            var pvCurrent = pv.value;
-            pv.innerHTML = "";
-            state.tenants.forEach(function (t) { pv.add(new Option(t.name || t.tenant_id, t.tenant_id)); });
-            pv.value = pvCurrent || TENANT_ID;
+            var options = state.tenants.map(function (t) {
+                return { value: t.tenant_id, label: t.name || t.tenant_id };
+            });
+            fillSelect("sel-tenant", options, TENANT_ID, "Select tenant");   // access mapping
+            fillSelect("pv-tenant_id", options, TENANT_ID);                  // provisioning
+            fillSelect("av-tenant_id", options, TENANT_ID);                  // activation
         });
     }
 
@@ -330,7 +363,7 @@
         return getJson(API + "/scope/list").then(function (res) {
             state.scopes = res.data || [];
 
-            if (!tables.scope) {
+            if (byId("tbl_scope") && !tables.scope) {
                 tables.scope = new Tabulator("#tbl_scope", {
                     data: state.scopes,
                     layout: "fitColumns",
@@ -369,15 +402,15 @@
                         })
                     ]
                 });
-            } else {
+            } else if (tables.scope) {
                 tables.scope.setData(state.scopes);
             }
         });
     }
 
     function refreshScopePickers() {
-        var box = document.getElementById("cl-scopes");
-        if (box.dataset.clientOpen === "true") {
+        var box = byId("cl-scopes");
+        if (box && box.dataset.clientOpen === "true") {
             var selected = checkedValues(box);
             checkboxes(box, state.scopes.map(function (s) { return s.name; }), selected);
         }
@@ -389,7 +422,7 @@
         return getJson(API + "/client/list").then(function (res) {
             state.clients = res.data || [];
 
-            if (!tables.client) {
+            if (byId("tbl_client") && !tables.client) {
                 tables.client = new Tabulator("#tbl_client", {
                     data: state.clients,
                     layout: "fitColumns",
@@ -440,10 +473,11 @@
                         }
                     ]
                 });
-            } else {
+            } else if (tables.client) {
                 tables.client.setData(state.clients);
             }
             renderActivation();
+            renderActivationTargets();
         });
     }
 
@@ -454,11 +488,12 @@
 
     // ------------------------------------------------------------ client form
 
-    var drawer = document.getElementById("client-drawer");
-    var backdrop = document.getElementById("client-drawer-backdrop");
+    // Only on the console page; the provisioning page has no client editor.
+    var drawer = byId("client-drawer");
+    var backdrop = byId("client-drawer-backdrop");
     var editing = null;
 
-    function field(id) { return document.getElementById("cl-" + id); }
+    function field(id) { return byId("cl-" + id); }
 
     var TEXT_FIELDS = [
         "client_id", "client_name", "display", "name", "domain", "client_logo",
@@ -561,14 +596,14 @@
         return out;
     }
 
-    document.getElementById("client-add").addEventListener("click", function () { openClient(null); });
-    document.getElementById("client-drawer-close").addEventListener("click", closeClient);
-    backdrop.addEventListener("click", closeClient);
+    on("client-add", "click", function () { openClient(null); });
+    on("client-drawer-close", "click", closeClient);
+    if (backdrop) backdrop.addEventListener("click", closeClient);
     document.addEventListener("keydown", function (e) {
-        if (e.key === "Escape" && drawer.dataset.open === "true") closeClient();
+        if (e.key === "Escape" && drawer && drawer.dataset.open === "true") closeClient();
     });
 
-    document.getElementById("client-save").addEventListener("click", function () {
+    on("client-save", "click", function () {
         var payload = readClientForm();
         if (!payload.client_id) { toast("w", "client_id is required", 4000); return; }
         if (!payload.tenant_id) { toast("w", "a tenant is required", 4000); return; }
@@ -584,7 +619,7 @@
         }).catch(function () { });
     });
 
-    document.getElementById("client-delete").addEventListener("click", function () {
+    on("client-delete", "click", function () {
         if (!editing || !editing.id) return;
         if (!confirm("Delete client '" + editing.client_id + "'? Applications using it will stop being able to sign in.")) return;
         save(API + "/client/delete", { id: editing.id, client_id: editing.client_id, tenant_id: editing.tenant_id }, "client deleted")
@@ -592,12 +627,12 @@
             .catch(function () { });
     });
 
-    document.getElementById("client-integrate").addEventListener("click", function () {
+    on("client-integrate", "click", function () {
         if (!editing || !editing.client_id) return;
         window.open(integrateUrl(editing), "_blank", "noopener");
     });
 
-    document.getElementById("cl-secret-reset").addEventListener("click", function () {
+    on("cl-secret-reset", "click", function () {
         if (!editing || !editing.client_id) return;
         if (!confirm("Regenerate the secret for '" + editing.client_id + "'? The current one stops working immediately.")) return;
         save(API + "/client/secret/reset", { client_id: editing.client_id, tenant_id: editing.tenant_id })
@@ -626,7 +661,7 @@
         return getJson(API + "/user/list").then(function (res) {
             state.users = res.data || [];
 
-            if (!tables.user) {
+            if (byId("tbl_user") && !tables.user) {
                 tables.user = new Tabulator("#tbl_user", {
                     data: state.users,
                     layout: "fitColumns",
@@ -669,16 +704,15 @@
                         }, 150, function (row) { return isEmailAddress(row.email); })
                     ]
                 });
-            } else {
+            } else if (tables.user) {
                 tables.user.setData(state.users);
             }
 
-            var sel = document.getElementById("sel-user");
-            var current = sel.value;
-            sel.innerHTML = "";
-            sel.add(new Option("Select user", ""));
-            state.users.forEach(function (u) { sel.add(new Option(u.name ? u.name + " — " + u.email : u.email, u.email)); });
-            sel.value = current;
+            var options = state.users.map(function (u) {
+                return { value: u.email, label: u.name ? u.name + " — " + u.email : u.email };
+            });
+            fillSelect("sel-user", options, "", "Select user");
+            fillSelect("av-user_name", options, "", "Select an account");
             renderActivation();
         });
     }
@@ -693,7 +727,8 @@
     }
 
     function renderClaims() {
-        var host = document.getElementById("claim-list");
+        var host = byId("claim-list");
+        if (!host) return;
         host.innerHTML = "";
         state.claims.forEach(function (claim) {
             var tag = el('<span class="tag" draggable="true"><span></span><button type="button" title="Delete claim">&times;</button></span>');
@@ -710,7 +745,7 @@
         });
     }
 
-    document.getElementById("claim-new").addEventListener("keypress", function (e) {
+    on("claim-new", "keypress", function (e) {
         if (e.key !== "Enter") return;
         var value = e.target.value.trim();
         if (!value) return;
@@ -773,8 +808,9 @@
     }
 
     function loadMapping() {
-        var email = document.getElementById("sel-user").value;
-        var tenantId = document.getElementById("sel-tenant").value;
+        if (!byId("tbl_mapping")) return Promise.resolve();
+        var email = byId("sel-user").value;
+        var tenantId = byId("sel-tenant").value;
 
         var build = function (data) {
             if (tables.mapping) {
@@ -791,7 +827,7 @@
                     {
                         title: "client", field: "client_id", editor: "list", widthGrow: 2,
                         editorParams: function () {
-                            return { values: clientOptionsFor(document.getElementById("sel-tenant").value) };
+                            return { values: clientOptionsFor(byId("sel-tenant").value) };
                         },
                         formatter: function (cell) {
                             var options = clientOptionsFor(cell.getRow().getData().tenant_id);
@@ -839,12 +875,12 @@
             .then(function (res) { build(res.data || []); });
     }
 
-    document.getElementById("sel-user").addEventListener("change", loadMapping);
-    document.getElementById("sel-tenant").addEventListener("change", loadMapping);
+    on("sel-user", "change", loadMapping);
+    on("sel-tenant", "change", loadMapping);
 
-    document.getElementById("mapping-add").addEventListener("click", function () {
-        var email = document.getElementById("sel-user").value;
-        var tenantId = document.getElementById("sel-tenant").value;
+    on("mapping-add", "click", function () {
+        var email = byId("sel-user").value;
+        var tenantId = byId("sel-tenant").value;
         if (!email || !tenantId) {
             toast("w", "select both a user and a tenant before adding a mapping", 4000);
             return;
@@ -873,17 +909,46 @@
             .replace(/^[_.\-]+|[_.\-]+$/g, "");
     }
 
-    document.getElementById("pv-client_id").addEventListener("input", function (e) {
+    on("pv-client_id", "input", function (e) {
         // Once it has been typed in by hand, stop overwriting it.
         provisionIdEdited = e.target.value.trim().length > 0;
     });
-    document.getElementById("pv-client_name").addEventListener("input", function (e) {
+    on("pv-client_name", "input", function (e) {
         if (provisionIdEdited) return;
-        document.getElementById("pv-client_id").value = slug(e.target.value);
+        byId("pv-client_id").value = slug(e.target.value);
     });
 
+    /**
+     * The provisioning request as the API would receive it, or null when the form does not yet
+     * describe one it would accept.
+     *
+     * Shared with the curl preview on purpose: the command shown has to be the same call this
+     * page makes, down to the defaults, or it is documentation of something else.
+     */
+    function provisionPayload() {
+        if (!byId("pv-client_name")) return null;
+        var clientName = byId("pv-client_name").value.trim();
+        var userName = byId("pv-user_name").value.trim();
+        if (!clientName || !userName) return null;
+
+        return {
+            tenant_id: byId("pv-tenant_id").value || TENANT_ID,
+            client_name: clientName,
+            client_id: byId("pv-client_id").value.trim() || null,
+            client_logo: byId("pv-client_logo").value.trim() || null,
+            application_type: byId("pv-application_type").value,
+            redirect_uris: lines(byId("pv-redirect_uris").value),
+            user_name: userName,
+            user_display_name: byId("pv-user_display_name").value.trim() || null,
+            claims: (byId("pv-claims").value || "")
+                .split(",").map(function (c) { return c.trim(); }).filter(Boolean),
+            send_activation_email: byId("pv-send_activation_email").checked
+        };
+    }
+
     function provisionResult(kind, heading, facts, links) {
-        var host = document.getElementById("pv-result");
+        var host = byId("pv-result");
+        if (!host) return;
         host.innerHTML = "";
         var title = document.createElement("h4");
         title.textContent = "Result";
@@ -919,26 +984,12 @@
         }
     }
 
-    document.getElementById("pv-submit").addEventListener("click", function () {
+    on("pv-submit", "click", function () {
         var button = this;
-        var clientName = document.getElementById("pv-client_name").value.trim();
-        var userName = document.getElementById("pv-user_name").value.trim();
-        if (!clientName) { toast("w", "an application name is required", 4000); return; }
-        if (!userName) { toast("w", "a user name or email is required", 4000); return; }
+        if (!byId("pv-client_name").value.trim()) { toast("w", "an application name is required", 4000); return; }
+        if (!byId("pv-user_name").value.trim()) { toast("w", "a user name or email is required", 4000); return; }
 
-        var payload = {
-            tenant_id: document.getElementById("pv-tenant_id").value || TENANT_ID,
-            client_name: clientName,
-            client_id: document.getElementById("pv-client_id").value.trim() || null,
-            client_logo: document.getElementById("pv-client_logo").value.trim() || null,
-            application_type: document.getElementById("pv-application_type").value,
-            redirect_uris: lines(document.getElementById("pv-redirect_uris").value),
-            user_name: userName,
-            user_display_name: document.getElementById("pv-user_display_name").value.trim() || null,
-            claims: (document.getElementById("pv-claims").value || "")
-                .split(",").map(function (c) { return c.trim(); }).filter(Boolean),
-            send_activation_email: document.getElementById("pv-send_activation_email").checked
-        };
+        var payload = provisionPayload();
 
         button.disabled = true;
         save(API + "/provision/client", payload).then(function (res) {
@@ -962,11 +1013,12 @@
                 { label: "Discovery", href: d.discovery }
             ]);
             provisionIdEdited = false;
-            document.getElementById("pv-client_name").value = "";
-            document.getElementById("pv-client_id").value = "";
-            document.getElementById("pv-redirect_uris").value = "";
-            document.getElementById("pv-client_logo").value = "";
-            paintLogo(document.getElementById("pv-logo-preview"), "", "");
+            byId("pv-client_name").value = "";
+            byId("pv-client_id").value = "";
+            byId("pv-redirect_uris").value = "";
+            byId("pv-client_logo").value = "";
+            paintLogo(byId("pv-logo-preview"), "", "");
+            renderCurl();
             return loadClients().then(loadUsers).then(loadClaims);
         }).catch(function (err) {
             // The refusals worth acting on carry a code; anything else is reported as it came.
@@ -1022,10 +1074,13 @@
     }
 
     function renderActivation() {
-        var filter = (document.getElementById("act-filter").value || "").toLowerCase().trim();
+        var clientHost = byId("act-clients");
+        var userHost = byId("act-users");
+        if (!clientHost || !userHost) return;
+
+        var filter = ((byId("act-filter") || {}).value || "").toLowerCase().trim();
         var matches = function (haystack) { return !filter || haystack.toLowerCase().indexOf(filter) > -1; };
 
-        var clientHost = document.getElementById("act-clients");
         clientHost.innerHTML = "";
         var clients = state.clients.filter(function (c) {
             return matches((c.client_name || "") + " " + (c.display || "") + " " + c.client_id + " " + c.tenant_id);
@@ -1050,7 +1105,6 @@
             });
         }
 
-        var userHost = document.getElementById("act-users");
         userHost.innerHTML = "";
         var users = state.users.filter(function (u) {
             return matches((u.name || "") + " " + u.email + " " + (u.type || ""));
@@ -1074,27 +1128,250 @@
         }
     }
 
-    document.getElementById("act-filter").addEventListener("input", renderActivation);
+    on("act-filter", "input", renderActivation);
+
+    // ------------------------------------------------- activation, as a request
+
+    /**
+     * The activation panel's form: the endpoint's own body, as three fields.
+     *
+     * The two lists below it flip one row at a time and are the fastest way to answer "why can
+     * this person not sign in". This is the same operation stated as a request — which is what
+     * the curl block downstream turns into a command, and what an onboarding script would send.
+     */
+    function activationLevel() {
+        return ((byId("av-target") || {}).value === "user") ? "user" : "client";
+    }
+
+    /** null until the form describes a request the endpoint would accept. */
+    function activationRequest() {
+        if (!byId("av-target")) return null;
+        var level = activationLevel();
+        var isActive = byId("av-is_active").value === "true";
+        var reason = (byId("av-reason").value || "").trim();
+
+        var body;
+        if (level === "user") {
+            var user = byId("av-user_name").value;
+            if (!user) return null;
+            body = { user_name: user, is_active: isActive };
+        } else {
+            var clientId = byId("av-client_id").value;
+            if (!clientId) return null;
+            body = {
+                tenant_id: byId("av-tenant_id").value || TENANT_ID,
+                client_id: clientId,
+                is_active: isActive
+            };
+        }
+        if (reason) body.reason = reason;
+
+        return {
+            level: level,
+            path: "/activation/" + level,
+            body: body,
+            subject: level === "user" ? body.user_name : body.client_id
+        };
+    }
+
+    /** Keeps the two target pickers in step with the tenant and with the loaded data. */
+    function renderActivationTargets() {
+        if (!byId("av-client_id")) return;
+        var tenantId = byId("av-tenant_id").value || TENANT_ID;
+        fillSelect("av-client_id", state.clients
+            .filter(function (c) { return c.tenant_id === tenantId; })
+            .map(function (c) {
+                return {
+                    value: c.client_id,
+                    label: (c.client_name || c.display || c.client_id) +
+                        (c.is_active === false ? " — deactivated" : "")
+                };
+            }), "", "Select an application");
+    }
+
+    // Only the level being switched is asked for. Both fields visible at once reads as though
+    // one request could do both, which is two endpoints and two different revocations.
+    function renderActivationLevel() {
+        if (!byId("av-target")) return;
+        var user = activationLevel() === "user";
+        byId("av-user-field").hidden = !user;
+        byId("av-client-field").hidden = user;
+        byId("av-tenant-field").hidden = user;
+    }
+
+    on("av-target", "change", function () { renderActivationLevel(); renderCurl(); });
+    on("av-tenant_id", "change", function () { renderActivationTargets(); renderCurl(); });
+    renderActivationLevel();
+
+    on("av-submit", "click", function () {
+        var request = activationRequest();
+        if (!request) {
+            toast("w", "pick the application or the account to switch", 4000);
+            return;
+        }
+        if (!request.body.is_active && !confirm(
+            "Deactivate '" + request.subject + "'?\n\n" +
+            (request.level === "user"
+                ? "They are signed out everywhere, their refresh tokens are revoked, and the sign-in page tells them the account is deactivated."
+                : "Sign-ins to it are refused with a message naming the application, and the refresh tokens it already holds are revoked."))) return;
+
+        var button = this;
+        button.disabled = true;
+        save(API + request.path, request.body)
+            .then(function () { return loadClients().then(loadUsers); })
+            .catch(function () { })
+            .then(function () { button.disabled = false; }, function () { button.disabled = false; });
+    });
+
+    // -------------------------------------------------------------- curl preview
+
+    /**
+     * The two requests above, as a command that can be pasted into a shell.
+     *
+     * It appears by itself as soon as either form holds a request the API would accept, and
+     * carries the values that are in the forms at that moment — the point being that provisioning
+     * is meant to be driven by another system, and the console is the only place that knows what
+     * a valid body for this deployment looks like.
+     *
+     * The credential is the one thing it cannot read off the page. The console's own session is
+     * an HttpOnly cookie — unreadable from script, deliberately — so the command authenticates
+     * the way a script would instead: client_credentials against the machine client seeded beside
+     * the console. That secret is stored only as a PBKDF2 hash, so the button that mints a new
+     * one is the single moment its value can be put into the command; until then the placeholder
+     * stays in, rather than the command looking complete and failing with invalid_client.
+     */
+    var TOKEN_ENDPOINT = root.dataset.tokenEndpoint || "";
+    var API_ROOT = root.dataset.apiRoot || "";
+    var MACHINE_HAS_SECRET = root.dataset.machineHasSecret === "true";
+    var SECRET_PLACEHOLDER = "<client secret>";
+
+    /** Single-quotes a value for a POSIX shell, including values that contain a quote. */
+    function shellQuote(value) {
+        return "'" + String(value == null ? "" : value).replace(/'/g, "'\\''") + "'";
+    }
+
+    function tokenCommand(step) {
+        var clientId = (byId("cu-client_id").value || "").trim();
+        var secret = (byId("cu-client_secret").value || "").trim() || SECRET_PLACEHOLDER;
+        return [
+            "# " + step + ". an access token for the management API",
+            "TOKEN=$(curl -s -X POST " + TOKEN_ENDPOINT + " \\",
+            "  -d 'grant_type=client_credentials' \\",
+            "  -d " + shellQuote("client_id=" + clientId) + " \\",
+            "  -d " + shellQuote("client_secret=" + secret) + " \\",
+            "  | jq -r .access_token)"
+        ].join("\n");
+    }
+
+    function postCommand(step, title, path, body) {
+        return [
+            "# " + step + ". " + title,
+            "curl -s -X POST " + API_ROOT + path + " \\",
+            '  -H "Authorization: Bearer $TOKEN" \\',
+            "  -H 'Content-Type: application/json' \\",
+            "  -d " + shellQuote(JSON.stringify(body, null, 2))
+        ].join("\n");
+    }
+
+    function renderCurl() {
+        var panel = byId("cu-panel");
+        if (!panel) return;
+
+        var provision = provisionPayload();
+        var activation = activationRequest();
+        if (!provision && !activation) {
+            panel.hidden = true;
+            return;
+        }
+
+        var step = 0;
+        var blocks = [tokenCommand(++step)];
+        if (provision) {
+            blocks.push(postCommand(++step,
+                "register '" + provision.client_name + "', create or reuse " + provision.user_name +
+                ", and map the two together",
+                "/provision/client", provision));
+        }
+        if (activation) {
+            blocks.push(postCommand(++step,
+                (activation.body.is_active ? "reactivate " : "deactivate ") + activation.subject,
+                activation.path, activation.body));
+        }
+
+        byId("cu-out").textContent = blocks.join("\n\n");
+        byId("cu-note").textContent = (byId("cu-client_secret").value || "").trim()
+            ? "The secret above is in the command. It is not stored anywhere readable, so this page is the only place it exists — copy the command before leaving."
+            : MACHINE_HAS_SECRET
+                ? "The command carries a placeholder for the secret. Generate one above to have it filled in, or paste the value you kept."
+                : "This client has no secret yet, so the token request will be refused until one is generated above.";
+        panel.hidden = false;
+    }
+
+    on("cu-secret-reset", "click", function () {
+        var clientId = (byId("cu-client_id").value || "").trim();
+        if (!clientId) { toast("w", "name the client the script should authenticate as", 4000); return; }
+        var known = state.clients.filter(function (c) { return c.client_id === clientId; })[0];
+        if (!confirm("Generate a new secret for '" + clientId + "'?\n\nThe current one stops working immediately.")) return;
+
+        save(API + "/client/secret/reset", {
+            client_id: clientId,
+            tenant_id: (known && known.tenant_id) || TENANT_ID
+        }).then(function (res) {
+            byId("cu-client_secret").value = (res.data || {}).client_secret || "";
+            renderCurl();
+        }).catch(function () { });
+    });
+
+    on("cu-copy", "click", function () {
+        var text = byId("cu-out").textContent;
+        if (!text) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(
+                function () { toast("s", "command copied", 2500); },
+                function () { toast("f", "the browser refused clipboard access - select and copy it by hand", 5000); });
+            return;
+        }
+        // No clipboard API without a secure context; selecting it is the next best thing.
+        var range = document.createRange();
+        range.selectNodeContents(byId("cu-out"));
+        var selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        toast("w", "this browser exposes no clipboard here - the command is selected, copy it", 5000);
+    });
+
+    // Every field on the page feeds one of the two requests, so the preview follows the whole
+    // form rather than a list of ids that would have to be kept in step with the markup.
+    if (byId("cu-panel")) {
+        byId("cu-client_id").value = root.dataset.machineClient || "";
+        root.addEventListener("input", renderCurl);
+        root.addEventListener("change", renderCurl);
+    }
 
     // -------------------------------------------------------------- new rows
 
-    document.getElementById("tenant-add").addEventListener("click", function () {
+    on("tenant-add", "click", function () {
         tables.tenant.addRow({ expire_mins: 480 });
     });
-    document.getElementById("user-add").addEventListener("click", function () {
+    on("user-add", "click", function () {
         tables.user.addRow({ type: "user" });
     });
-    document.getElementById("scope-add").addEventListener("click", function () {
+    on("scope-add", "click", function () {
         tables.scope.addRow({ claims: [], require_consent: true, is_default: false, is_protocol: false });
     });
 
     // ----------------------------------------------------------------- start
 
-    Promise.all([loadTenants(), loadScopes(), loadClaims()])
-        .then(loadClients)
-        .then(loadUsers)
-        .then(loadMapping)
-        .catch(function (err) {
-            toast("f", "could not load the console: " + err.message, 8000);
-        });
+    // Each page loads what it draws. The provisioning page needs the three lists its selects and
+    // activation rows are built from, and none of the catalogue the console's editors use.
+    var boot = PAGE === "provisioning"
+        ? loadTenants().then(loadClients).then(loadUsers).then(renderCurl)
+        : Promise.all([loadTenants(), loadScopes(), loadClaims()])
+            .then(loadClients)
+            .then(loadUsers)
+            .then(loadMapping);
+
+    boot.catch(function (err) {
+        toast("f", "could not load the console: " + err.message, 8000);
+    });
 })();

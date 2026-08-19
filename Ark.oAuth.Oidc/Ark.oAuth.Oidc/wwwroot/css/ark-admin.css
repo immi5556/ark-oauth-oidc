@@ -484,6 +484,61 @@ legend {
 .ark-toast-f { border-color: color-mix(in srgb, var(--ark-danger) 45%, transparent); color: var(--ark-danger); }
 .ark-toast-w { border-color: color-mix(in srgb, var(--ark-warn) 45%, transparent); color: var(--ark-warn); }
 
+/* ---------- console navigation ---------- */
+.ark-nav { display: flex; align-items: center; gap: 4px; margin-left: 10px; }
+.ark-nav-link {
+    font-size: 13px;
+    font-weight: 560;
+    color: var(--ark-fg-muted);
+    padding: 6px 11px;
+    border-radius: var(--ark-radius-sm);
+    border: 1px solid transparent;
+}
+.ark-nav-link:hover { color: var(--ark-fg); background: var(--ark-surface-2); text-decoration: none; }
+/* The page you are on, marked the same way it is announced to a screen reader. */
+.ark-nav-link[aria-current="page"] {
+    color: var(--ark-accent);
+    background: var(--ark-accent-soft);
+    border-color: color-mix(in srgb, var(--ark-accent) 30%, transparent);
+}
+
+/* ---------- activation form, and the generated command ---------- */
+.ark-activation-form {
+    background: var(--ark-surface-2);
+    border: 1px solid var(--ark-border);
+    border-radius: var(--ark-radius-sm);
+    padding: 14px 16px 4px;
+    margin-bottom: 18px;
+}
+.ark-activation-head { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; }
+.ark-activation-head h4 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ark-fg-muted);
+}
+.ark-activation-head .ark-spacer { flex: 1; }
+.ark-activation-head input { width: auto; min-width: 180px; }
+
+/* A command meant to be read and copied whole: it wraps rather than scrolling sideways, so a
+   long redirect_uri or a secret cannot end up off the right-hand edge and out of the copy. */
+.ark-code {
+    margin: 0 0 10px;
+    padding: 14px 16px;
+    background: var(--ark-surface-2);
+    border: 1px solid var(--ark-border);
+    border-radius: var(--ark-radius-sm);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--ark-fg);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+}
+
 /* ---------- landing ---------- */
 .ark-hero { max-width: 820px; margin: 0 auto; padding: 60px 22px; }
 .ark-hero h1 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 8px; }
@@ -532,4 +587,6 @@ legend {
     .ark-topbar { padding: 0 14px; }
     .ark-main { padding: 16px 14px 48px; }
     .ark-topbar-title { display: none; }
+    .ark-topbar-sub { display: none; }
+    .ark-nav { margin-left: 0; }
 }

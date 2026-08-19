@@ -6,6 +6,11 @@
  * 2. up url        : auth/api/migration/v1/sql/?action=up&name=00002_sql.sql
  *    rollback url  : auth/api/migration/v1/sql/?action=down&name=00002_sql.sql
  *    details: created new ark_status table to get user retry attempt
+ *
+ * Since 2.1.1 these run by themselves: AddArkOidcServer's bootstrap applies every script the
+ * database has not had yet and records it in ark_schema_history, so this endpoint is only needed
+ * to roll one back, or to drive a provider whose scripts are not embedded here. See
+ * ArkSchemaUpdater.
  *********************/
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,15 +24,26 @@ namespace Ark.oAuth.Oidc
         [HttpGet]
         public async Task<dynamic> ExexuteMigration([FromServices] DataAccess da, [FromQuery] string action, [FromQuery] string name)
         {
-            //name: "Ark.oAuth.Oidc.Migration.Sql.up.00001_sql.sql"; //embedded file name
+            //name: "00001_sql.sql"; //file name inside Migration/{provider}/{up|down}
             try
             {
-                if (action.ToLower().Trim() == "up") new MigrationScript().Migrate(da, name);
-                if (action.ToLower().Trim() == "down") new MigrationScript().Rollback(da, name);
+                // The result is read now. Both calls catch their own exceptions and report through
+                // a bool, so ignoring it meant a failed migration answered "executed." — which is
+                // how a database ends up one script behind while its operator believes otherwise.
+                var runner = new MigrationScript();
+                var verb = (action ?? "").ToLower().Trim();
+                var ok = verb switch
+                {
+                    "up" => runner.Migrate(da, name),
+                    "down" => runner.Rollback(da, name),
+                    _ => throw new ApplicationException($"unknown action '{action}' - use 'up' or 'down'.")
+                };
                 return new
                 {
-                    error = false,
-                    msg = $"migration {name} execcuted."
+                    error = !ok,
+                    msg = ok
+                        ? $"migration {name} executed."
+                        : $"migration {name} failed. {runner.Error}"
                 };
             }
             catch (Exception ex)
