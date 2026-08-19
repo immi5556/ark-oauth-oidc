@@ -117,6 +117,23 @@ namespace Ark.oAuth.Oidc.Protocol
         }
 
         /// <summary>
+        /// The same endpoints, built without an <see cref="HttpRequest"/> to read.
+        ///
+        /// For work that has no request to derive a host from — background jobs, and the
+        /// provisioning API, whose response carries the issuer and setup URL a caller is expected
+        /// to store. Requires <c>BaseUrl</c> to be configured, since there is nothing else to
+        /// fall back to.
+        /// </summary>
+        public static ArkOidcEndpoints For(ArkAuthServerConfig config, string tenantId)
+        {
+            var root = PublicRoot(config);
+            if (string.IsNullOrWhiteSpace(root))
+                throw new ApplicationException(
+                    "'ark_oauth_server:BaseUrl' is not configured, so the issuer URL cannot be built outside a request.");
+            return new ArkOidcEndpoints(root, tenantId);
+        }
+
+        /// <summary>
         /// The externally reachable root of the application — <c>BaseUrl</c> with <c>BasePath</c>
         /// appended when it is not already part of it.
         ///

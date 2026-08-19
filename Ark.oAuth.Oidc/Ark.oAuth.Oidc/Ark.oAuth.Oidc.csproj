@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.0.1</Version>
-		<AssemblyVersion>2.0.1.0</AssemblyVersion>
-		<FileVersion>2.0.1.0</FileVersion>
+		<Version>2.1.0</Version>
+		<AssemblyVersion>2.1.0.0</AssemblyVersion>
+		<FileVersion>2.1.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -54,6 +54,43 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.1.0 — provisioning, activation and branding.
+
+* **Provisioning API.** POST /api/oauth/v1/provision/client registers an application, creates or
+  reuses a user, and adds the user-client access mapping in one call. An existing client name is
+  refused with HTTP 409 and code "client_exists" and nothing is written — a live application's
+  redirect URIs are never silently rewritten. An existing user is reused and mapped, which is what
+  happens when somebody is given their second application. A user this creates signs in
+  immediately on ark_oauth_server:DefaultPw; pass send_activation_email to email a link instead.
+* **Activation, at two levels.** Applications already had is_active; accounts now have one too.
+  POST /api/oauth/v1/activation/client and /activation/user switch either off, and revoke what has
+  already been handed out — a deactivated client loses its refresh tokens, a deactivated user
+  loses their sessions and refresh tokens — so the switch takes effect now rather than whenever
+  they happened to expire. The switch is honoured through the plain client/user upsert too.
+* **Sign-in says which level is off.** A deactivated application names itself on the authorization
+  endpoint; a deactivated account gets "Your account has been deactivated…" on the sign-in page.
+  Both only after the password has been verified, so the single deliberately-vague message for
+  every credentials failure — and with it the page's resistance to account enumeration — is
+  unchanged.
+* **Two new console panels**: Provision an application, and Activation (both switches side by
+  side, with the state of every client and account visible at once).
+* **Client logos.** Uploaded in the client editor or at provisioning time and inlined as a data
+  URI, so nothing has to be hosted. The sign-in page header now carries the host logo and the
+  client logo together, and lays itself out for two marks, one, or none — the previous header
+  showed only the client's, with the host's relegated to the footer. The console's top bar shows
+  the same lockup, and the client grid shows each client's mark.
+* **The client setup page can run the flow.** /{tenant}/oauth2/integrate/{client_id} gained a live
+  authorization code + PKCE section: it generates a real verifier and S256 challenge in the
+  browser, runs the request in an embedded iframe ending at the redirect_uri you pick, and shows
+  the token-exchange command for the code that comes back.
+* The interactive pages now send Content-Security-Policy: frame-ancestors 'self' — clickjacking
+  protection they did not have, and what lets the setup page frame the authorization endpoint.
+
+Migration: existing databases must run 00004
+(GET /api/migration/v1/sql?action=up&amp;name=00004_sql.sql), which adds users.is_active. It is one
+additive, defaulted column, so every existing account stays active. A database created by this
+version already has it.
+
 2.0.1 — maintenance release.
 
 No API or protocol change over 2.0.0. Rebuilt and republished so the package on nuget.org matches

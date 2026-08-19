@@ -32,9 +32,33 @@
 </head>
 <body>
 <header class="ark-topbar">
-    @if (!string.IsNullOrEmpty(ViewBag.HostLogo as string))
+    @*
+        Host mark, divider, client mark — the same lockup the sign-in page draws, so the console
+        and the pages it configures are recognisably one product. Each half is drawn only if it
+        is configured, and the divider only if both are, so a deployment that sets one, both or
+        neither all end up aligned rather than with a hole where an image would have been.
+    *@
+    @{
+        var hostLogo = ViewBag.HostLogo as string;
+        var clientLogo = ViewBag.ClientLogo as string;
+        var logoCount = (string.IsNullOrWhiteSpace(hostLogo) ? 0 : 1) + (string.IsNullOrWhiteSpace(clientLogo) ? 0 : 1);
+    }
+    @if (logoCount > 0)
     {
-        <img src="@ViewBag.HostLogo" alt="" />
+        <span class="ark-lockup">
+            @if (!string.IsNullOrWhiteSpace(hostLogo))
+            {
+                <img src="@hostLogo" alt="@ViewBag.HostName" />
+            }
+            @if (logoCount == 2)
+            {
+                <span class="ark-lockup-sep" aria-hidden="true"></span>
+            }
+            @if (!string.IsNullOrWhiteSpace(clientLogo))
+            {
+                <img src="@clientLogo" alt="" />
+            }
+        </span>
     }
     <div>
         <div class="ark-topbar-title">@title</div>
@@ -82,6 +106,125 @@
             <button id="user-add" type="button">Add user</button>
         </div>
         <div class="ark-panel-body"><div id="tbl_user"></div></div>
+    </section>
+
+    @*
+        Provisioning. The four steps below are the ones that have to happen in order for a new
+        application to work at all, and the fourth — the access mapping — is the one that gets
+        forgotten, because its absence shows up as "that username and password combination was
+        not recognised" on the sign-in page rather than as anything about a missing mapping.
+        This panel is the whole sequence behind one button, over the same API another system
+        would call.
+    *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Provision an application</h2>
+            <span class="ark-hint">registers the client, creates or reuses the user, and maps the two together — in one call</span>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-provision">
+                <div class="ark-provision-form">
+                    <div class="ark-grid-2">
+                        <div class="ark-field">
+                            <label for="pv-tenant_id">Tenant</label>
+                            <select id="pv-tenant_id"></select>
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-client_name">Application name <span class="ark-req">required</span></label>
+                            <input type="text" id="pv-client_name" placeholder="Billing Portal" />
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-client_id">client_id</label>
+                            <input type="text" id="pv-client_id" placeholder="derived from the name" />
+                            <div class="ark-note">Refused if it is already taken — nothing is overwritten.</div>
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-application_type">application_type</label>
+                            <select id="pv-application_type">
+                                <option value="web">web</option>
+                                <option value="spa">spa</option>
+                                <option value="native">native</option>
+                                <option value="service">service</option>
+                            </select>
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-user_name">User name or email <span class="ark-req">required</span></label>
+                            <input type="text" id="pv-user_name" placeholder="jane@@example.com" />
+                            <div class="ark-note">An existing account is reused and mapped to the new client.</div>
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-user_display_name">User's display name</label>
+                            <input type="text" id="pv-user_display_name" placeholder="Jane Smith" />
+                        </div>
+                    </div>
+                    <div class="ark-field">
+                        <label for="pv-redirect_uris">redirect_uris</label>
+                        <textarea id="pv-redirect_uris" spellcheck="false" placeholder="https://app.example.com/signin-oidc"></textarea>
+                        <div class="ark-note">One per line. Can be added later in the client editor.</div>
+                    </div>
+                    <div class="ark-field">
+                        <label for="pv-claims">Claims for the mapping</label>
+                        <input type="text" id="pv-claims" placeholder="sub, name, email, email_verified" />
+                        <div class="ark-note">Comma separated. Left blank, the identity claims are used.</div>
+                    </div>
+                    <div class="ark-field">
+                        <label for="pv-client_logo">Application logo</label>
+                        <div class="ark-logo-edit">
+                            <span class="ark-logo-preview" id="pv-logo-preview" data-empty="true"></span>
+                            <div class="ark-logo-edit-main">
+                                <input type="text" id="pv-client_logo" placeholder="https://… or upload one" />
+                                <div class="ark-note">
+                                    <button type="button" class="ark-btn-ghost ark-btn-sm" id="pv-logo-pick">Upload image…</button>
+                                    <button type="button" class="ark-btn-ghost ark-btn-sm" id="pv-logo-clear">Remove</button>
+                                    <input type="file" id="pv-logo-file" accept="image/*" hidden />
+                                    Appears on the sign-in page for this application.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ark-check">
+                        <input type="checkbox" id="pv-send_activation_email" />
+                        <label for="pv-send_activation_email">Email an activation link instead of using the default password</label>
+                    </div>
+                    <div class="ark-provision-actions">
+                        <button type="button" id="pv-submit">Provision</button>
+                        <span class="ark-note" style="margin:0">
+                            A new account signs in with <code>ark_oauth_server:DefaultPw</code> unless the box above is ticked.
+                        </span>
+                    </div>
+                </div>
+                <aside class="ark-provision-result" id="pv-result">
+                    <h4>Result</h4>
+                    <p class="ark-empty">Nothing provisioned yet.</p>
+                </aside>
+            </div>
+        </div>
+    </section>
+
+    @*
+        Activation. Both switches in one place, because "why can this person not sign in" is one
+        question with two possible answers and chasing it across two grids is how the wrong one
+        gets flipped. Each row says which state it is in and what turning it off will do.
+    *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Activation</h2>
+            <span class="ark-hint">suspend an application or an account without deleting it — sign-ins are then refused with a message naming the level</span>
+            <span class="ark-spacer"></span>
+            <input type="search" id="act-filter" placeholder="Filter…" aria-label="Filter clients and users" />
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-activation">
+                <div class="ark-activation-col">
+                    <h4>Applications <span class="ark-hint">client level</span></h4>
+                    <div class="ark-activation-list" id="act-clients"></div>
+                </div>
+                <div class="ark-activation-col">
+                    <h4>Accounts <span class="ark-hint">user level</span></h4>
+                    <div class="ark-activation-list" id="act-users"></div>
+                </div>
+            </div>
+        </div>
     </section>
 
     <section class="ark-panel">
@@ -175,11 +318,20 @@
             </div>
             <div class="ark-field">
                 <label for="cl-client_logo">client_logo</label>
-                <input type="text" id="cl-client_logo" placeholder="https://… or a data: URI" />
-                <div class="ark-note">
-                    <button type="button" class="ark-btn-ghost ark-btn-sm" id="cl-logo-pick">Upload image…</button>
-                    <input type="file" id="cl-logo-file" accept="image/*" hidden />
-                    Inlined as a data URI; keep it under 256 KB.
+                <div class="ark-logo-edit">
+                    <span class="ark-logo-preview" id="cl-logo-preview" data-empty="true"></span>
+                    <div class="ark-logo-edit-main">
+                        <input type="text" id="cl-client_logo" placeholder="https://… or a data: URI" />
+                        <div class="ark-note">
+                            <button type="button" class="ark-btn-ghost ark-btn-sm" id="cl-logo-pick">Upload image…</button>
+                            <button type="button" class="ark-btn-ghost ark-btn-sm" id="cl-logo-clear">Remove</button>
+                            <input type="file" id="cl-logo-file" accept="image/*" hidden />
+                            Uploaded images are inlined as a data URI, so nothing has to be hosted
+                            anywhere — keep them under 256&nbsp;KB. Shown on the sign-in page beside
+                            the host's own logo; with none set the page lays itself out around the
+                            host mark alone.
+                        </div>
+                    </div>
                 </div>
             </div>
         </fieldset>

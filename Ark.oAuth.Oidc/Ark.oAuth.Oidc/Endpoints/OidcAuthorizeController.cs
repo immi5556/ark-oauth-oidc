@@ -41,6 +41,7 @@ namespace Ark.oAuth.Oidc.Endpoints
         private async Task<IActionResult> Handle(string tenantId, IFormCollection? form)
         {
             NoStore();
+            FrameAncestorsSelf();
             ArkTenant tenant;
             try
             {
@@ -65,7 +66,13 @@ namespace Ark.oAuth.Oidc.Endpoints
             if (client == null)
                 return ErrorPage(OAuthErrorCodes.InvalidRequest, "unknown client_id.", brand, tenant);
             if (!client.is_active)
-                return ErrorPage(OAuthErrorCodes.UnauthorizedClient, "this client is disabled.", brand, tenant);
+                // Named, and phrased for the person in front of the screen rather than for the
+                // developer reading a log. There is nothing they can retype to get past this, so
+                // the page has to say what happened and who can undo it.
+                return ErrorPage(OAuthErrorCodes.UnauthorizedClient,
+                    $"{(string.IsNullOrWhiteSpace(client.display) ? client.client_id : client.display)} has been deactivated, " +
+                    "so it is not accepting sign-ins at the moment. Please contact your administrator.",
+                    brand, tenant);
 
             brand = await BuildBrandAsync(client);
 
@@ -159,6 +166,25 @@ namespace Ark.oAuth.Oidc.Endpoints
                     if ((DateTime.UtcNow - session.auth_time).TotalSeconds > maxAge) session = null;
                 }
                 if (prompt.Contains("login")) session = null;
+
+                // A session outlives the switch that created it. Deactivating a user revokes their
+                // sessions, so this is only reached when the flag was flipped straight in the
+                // database — but without it, a browser that already holds the cookie would keep
+                // being issued codes for an account that is switched off, which is the one thing
+                // the switch is for.
+                if (session != null)
+                {
+                    var holder = await Ctx.users.AsNoTracking()
+                        .FirstOrDefaultAsync(u => u.email.ToLower() == session.subject.ToLower());
+                    if (holder != null && !holder.is_active)
+                    {
+                        await _grants.RevokeSessionAsync(session.session_id);
+                        var inactive = new ArkAccountInactiveException(ArkActivationLevel.User, holder.name ?? holder.email);
+                        _da.Log("signin_inactive", tenant.tenant_id, "session dropped: user deactivated",
+                            $"user: {session.subject}, client: {client.client_id}", "warn");
+                        return LoginPage(brand, client, inactive.FriendlyMessage, session.subject, tenant);
+                    }
+                }
 
                 var action = form?["ark_action"].ToString();
 
@@ -280,6 +306,16 @@ namespace Ark.oAuth.Oidc.Endpoints
                 var session = await _grants.CreateSessionAsync(tenant.tenant_id, user.email, opt.SessionLifetimeMinutes);
                 _da.Log("signin", tenant.tenant_id, "sign-in succeeded", $"user: {username}, client: {client.client_id}");
                 return (session, null);
+            }
+            catch (ArkAccountInactiveException ex)
+            {
+                // The one failure that is told apart from the others. It is only ever reached
+                // after the password has been verified — see DataAccess.ValidateUserCreds — so
+                // naming the reason tells nobody anything they could not already establish, and
+                // it saves the user retyping credentials that are in fact correct.
+                _da.Log("signin_inactive", tenant.tenant_id, $"sign-in refused: {ex.Level} deactivated",
+                    $"user: {username}, client: {client.client_id}", "warn");
+                return (null, ex.FriendlyMessage);
             }
             catch (Exception ex)
             {
@@ -412,8 +448,14 @@ namespace Ark.oAuth.Oidc.Endpoints
             return new OidcBrandModel
             {
                 HostLogo = cfg?.host_logo,
-                ClientLogo = client?.client_logo ?? cfg?.client_logo,
+                // A logo registered against the client wins; the configured one is the fallback
+                // for every client that has not uploaded its own.
+                ClientLogo = string.IsNullOrWhiteSpace(client?.client_logo) ? cfg?.client_logo : client!.client_logo,
                 HostName = cfg?.host_company_display ?? cfg?.host_company_name ?? "Identity Provider",
+                ClientName = client == null
+                    ? null
+                    : new[] { client.client_name, client.display, client.name, client.client_id }
+                        .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
                 PrivacyUrl = cfg?.privacy_policy_url,
                 TermsUrl = cfg?.terms_url
             };

@@ -66,7 +66,11 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.Issuer = endpoints.Issuer;
             ViewBag.Discovery = endpoints.Discovery;
             ViewBag.Jwks = endpoints.Jwks;
+            // The same two marks the sign-in page shows, in the same order, so the console and
+            // the pages it configures read as one product rather than two. The client mark here
+            // is the configured default — the per-client ones are drawn against their own rows.
             ViewBag.HostLogo = ser.EmailConfig?.host_logo ?? "";
+            ViewBag.ClientLogo = ser.EmailConfig?.client_logo ?? "";
             ViewBag.HostName = ser.EmailConfig?.host_company_display ?? ser.EmailConfig?.host_company_name ?? "Identity Provider";
             ViewBag.ConsoleCss = AssetUrl(appRoot, CssAsset);
             ViewBag.ConsoleJs = AssetUrl(appRoot, JsAsset);

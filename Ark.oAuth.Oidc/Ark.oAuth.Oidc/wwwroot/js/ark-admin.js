@@ -36,40 +36,133 @@
         setTimeout(function () { el.remove(); }, ms || 3500);
     }
 
-    function getJson(url) {
-        return fetch(url, { headers: { Accept: "application/json" } }).then(function (r) {
-            if (!r.ok) throw new Error(r.status + " " + r.statusText);
-            return r.json();
+    /**
+     * One request path for the whole console.
+     *
+     * The body is read before the status is judged, because the provisioning and activation
+     * endpoints answer a refusal with a real HTTP status *and* an { error, code, msg } body —
+     * "that client name is taken" is a 409. Throwing on !r.ok before reading would have replaced
+     * that sentence with "409 Conflict", which tells the operator nothing they can act on.
+     */
+    function request(url, options) {
+        return fetch(url, options).then(function (r) {
+            return r.text().then(function (text) {
+                var payload = null;
+                try { payload = text ? JSON.parse(text) : null; } catch (e) { payload = null; }
+                if (r.ok) return payload || {};
+                // No JSON body means something other than the API answered — most often the
+                // sign-in page, because the session expired.
+                var err = new Error((payload && payload.msg) || (r.status + " " + r.statusText));
+                err.status = r.status;
+                err.payload = payload;
+                throw err;
+            });
         });
     }
 
+    function getJson(url) {
+        return request(url, { headers: { Accept: "application/json" } });
+    }
+
     function postJson(url, body) {
-        return fetch(url, {
+        return request(url, {
             method: "POST",
             body: JSON.stringify(body),
             headers: { Accept: "application/json", "Content-Type": "application/json" }
-        }).then(function (r) {
-            if (!r.ok) throw new Error(r.status + " " + r.statusText);
-            return r.json();
         });
     }
 
     // Every management endpoint answers { error, msg, data }. Surface both outcomes the
-    // same way so a failed save is never mistaken for a successful one.
+    // same way so a failed save is never mistaken for a successful one. `reported` marks an
+    // error whose message is already on screen, so a caller's own catch cannot toast it twice.
     function save(url, body, okMessage) {
         return postJson(url, body).then(function (res) {
             if (res && res.error) {
-                toast("f", res.msg || "request failed", 6000);
-                return Promise.reject(new Error(res.msg || "request failed"));
+                var err = new Error(res.msg || "request failed");
+                err.payload = res;
+                err.reported = true;
+                toast("f", err.message, 6000);
+                throw err;
             }
             toast("s", okMessage || (res && res.msg) || "saved", 3000);
             return res;
         }).catch(function (err) {
-            if (err && err.message && err.message.indexOf("request failed") < 0) {
+            if (!err.reported) {
                 toast("f", err.message, 6000);
+                err.reported = true;
             }
             throw err;
         });
+    }
+
+    // ------------------------------------------------------------------- logos
+
+    /**
+     * Draws a logo into a fixed frame, or marks the frame empty.
+     *
+     * One helper for all three places a logo appears — the client editor, the provisioning form
+     * and the grid thumbnail — so they cannot drift apart. The frame keeps its size either way:
+     * a grid whose row height depends on whether a logo happens to be set combs up and down as
+     * images load, and "no logo" is a state worth being able to see rather than blank space.
+     */
+    function paintLogo(box, value, alt) {
+        box.innerHTML = "";
+        var url = (value || "").trim();
+        box.dataset.empty = url ? "false" : "true";
+        if (!url) return;
+        var img = document.createElement("img");
+        img.alt = alt || "";
+        // A URL that 404s must not leave an empty frame claiming a logo is set.
+        img.addEventListener("error", function () {
+            box.innerHTML = "";
+            box.dataset.empty = "true";
+        });
+        img.src = url;
+        box.appendChild(img);
+    }
+
+    var LOGO_MAX_BYTES = 256 * 1024;
+
+    /**
+     * Wires up one logo field: text box, live preview, upload and remove.
+     *
+     * Uploads are inlined as data URIs rather than written to disk, so a logo needs no upload
+     * directory, no static file route and no second thing to back up — at the cost of a size
+     * limit, since the value travels in every page that renders it.
+     */
+    function bindLogoField(prefix) {
+        var input = document.getElementById(prefix + "-client_logo");
+        var preview = document.getElementById(prefix + "-logo-preview");
+        var file = document.getElementById(prefix + "-logo-file");
+        if (!input || !preview) return;
+
+        function repaint() { paintLogo(preview, input.value, ""); }
+
+        input.addEventListener("input", repaint);
+        var pick = document.getElementById(prefix + "-logo-pick");
+        if (pick) pick.addEventListener("click", function () { file.click(); });
+        var clear = document.getElementById(prefix + "-logo-clear");
+        if (clear) clear.addEventListener("click", function () {
+            input.value = "";
+            if (file) file.value = "";
+            repaint();
+        });
+        if (file) file.addEventListener("change", function (e) {
+            var chosen = e.target.files && e.target.files[0];
+            if (!chosen) return;
+            if (chosen.size > LOGO_MAX_BYTES) {
+                toast("w", "that image is larger than 256 KB - host it and paste the URL instead", 5000);
+                file.value = "";
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function (ev) {
+                input.value = ev.target.result;
+                repaint();
+            };
+            reader.readAsDataURL(chosen);
+        });
+        repaint();
     }
 
     function el(html) {
@@ -222,6 +315,12 @@
             sel.add(new Option("Select tenant", ""));
             state.tenants.forEach(function (t) { sel.add(new Option(t.name || t.tenant_id, t.tenant_id)); });
             sel.value = current || TENANT_ID;
+
+            var pv = document.getElementById("pv-tenant_id");
+            var pvCurrent = pv.value;
+            pv.innerHTML = "";
+            state.tenants.forEach(function (t) { pv.add(new Option(t.name || t.tenant_id, t.tenant_id)); });
+            pv.value = pvCurrent || TENANT_ID;
         });
     }
 
@@ -295,6 +394,15 @@
                     data: state.clients,
                     layout: "fitColumns",
                     columns: [
+                        {
+                            title: "", field: "client_logo", width: 54, hozAlign: "center", headerSort: false,
+                            formatter: function (cell) {
+                                var box = document.createElement("span");
+                                box.className = "ark-logo-cell";
+                                paintLogo(box, cell.getValue(), "");
+                                return box;
+                            }
+                        },
                         { title: "tenant", field: "tenant_id", widthGrow: 1 },
                         { title: "client_id", field: "client_id", widthGrow: 2 },
                         {
@@ -335,6 +443,7 @@
             } else {
                 tables.client.setData(state.clients);
             }
+            renderActivation();
         });
     }
 
@@ -386,6 +495,7 @@
         tenantSelect.value = editing.tenant_id || TENANT_ID;
 
         TEXT_FIELDS.forEach(function (f) { field(f).value = editing[f] || ""; });
+        paintLogo(document.getElementById("cl-logo-preview"), editing.client_logo, "");
         NUMBER_FIELDS.forEach(function (f) { field(f).value = editing[f] != null ? editing[f] : ""; });
         FLAG_FIELDS.forEach(function (f) { field(f).checked = !!editing[f]; });
         field("application_type").value = editing.application_type || "web";
@@ -508,17 +618,7 @@
             .catch(function () { });
     });
 
-    document.getElementById("cl-logo-pick").addEventListener("click", function () {
-        document.getElementById("cl-logo-file").click();
-    });
-    document.getElementById("cl-logo-file").addEventListener("change", function (e) {
-        var file = e.target.files && e.target.files[0];
-        if (!file) return;
-        if (file.size > 256 * 1024) { toast("w", "image is larger than 256 KB — link to it instead", 5000); return; }
-        var reader = new FileReader();
-        reader.onload = function (ev) { field("client_logo").value = ev.target.result; };
-        reader.readAsDataURL(file);
-    });
+    bindLogoField("cl");
 
     // ------------------------------------------------------------------ users
 
@@ -538,6 +638,18 @@
                         {
                             title: "type", field: "type", editor: "list", width: 110,
                             editorParams: { values: ["user", "service"] }
+                        },
+                        {
+                            // Read-only here on purpose. Deactivating has to revoke the account's
+                            // sessions and refresh tokens as well, or a signed-in browser carries
+                            // on working — so it is done from the Activation panel, which calls
+                            // the endpoint that does both.
+                            title: "active", field: "is_active", width: 80, hozAlign: "center",
+                            formatter: function (cell) {
+                                return cell.getValue() === false
+                                    ? '<span class="ark-badge ark-badge-warn">no</span>'
+                                    : '<span class="ark-badge ark-badge-ok">yes</span>';
+                            }
                         },
                         { title: "reset_mode", field: "reset_mode", editor: "tickCross", formatter: "tickCross", width: 110 },
                         { title: "emailed", field: "emailed", formatter: "tickCross", width: 95 },
@@ -567,6 +679,7 @@
             sel.add(new Option("Select user", ""));
             state.users.forEach(function (u) { sel.add(new Option(u.name ? u.name + " — " + u.email : u.email, u.email)); });
             sel.value = current;
+            renderActivation();
         });
     }
 
@@ -739,6 +852,229 @@
         if (!tables.mapping) { loadMapping().then(function () { tables.mapping.addRow({ email: email, tenant_id: tenantId, claims: [] }); }); return; }
         tables.mapping.addRow({ email: email, tenant_id: tenantId, claims: [] });
     });
+
+    // ------------------------------------------------------------ provisioning
+
+    /**
+     * The provisioning panel.
+     *
+     * Registering an application is four operations in a fixed order — client, redirect URIs,
+     * account, access mapping — and the mapping is the one that gets forgotten, because its
+     * absence shows up on the sign-in page as "that username and password combination was not
+     * recognised" rather than as anything about a missing mapping. This posts all four to
+     * /provision/client as one call, and reports back which of them it actually had to do.
+     */
+    var provisionIdEdited = false;
+
+    /** Mirrors ArkProvisioning.Slug on the server, so the box shows what will actually be used. */
+    function slug(value) {
+        return (value || "").trim().toLowerCase()
+            .replace(/[^a-z0-9._-]+/g, "_")
+            .replace(/^[_.\-]+|[_.\-]+$/g, "");
+    }
+
+    document.getElementById("pv-client_id").addEventListener("input", function (e) {
+        // Once it has been typed in by hand, stop overwriting it.
+        provisionIdEdited = e.target.value.trim().length > 0;
+    });
+    document.getElementById("pv-client_name").addEventListener("input", function (e) {
+        if (provisionIdEdited) return;
+        document.getElementById("pv-client_id").value = slug(e.target.value);
+    });
+
+    function provisionResult(kind, heading, facts, links) {
+        var host = document.getElementById("pv-result");
+        host.innerHTML = "";
+        var title = document.createElement("h4");
+        title.textContent = "Result";
+        host.appendChild(title);
+
+        var alert = el('<div class="ark-toast ark-toast-' + kind + '" style="margin-bottom:12px"></div>');
+        alert.textContent = heading;
+        host.appendChild(alert);
+
+        if (facts && facts.length) {
+            var list = el("<ul></ul>");
+            facts.forEach(function (line) {
+                var li = document.createElement("li");
+                var text = document.createElement("span");
+                text.textContent = line;
+                li.appendChild(text);
+                list.appendChild(li);
+            });
+            host.appendChild(list);
+        }
+        if (links && links.length) {
+            var box = el('<div class="ark-result-links"></div>');
+            links.forEach(function (link) {
+                var a = document.createElement("a");
+                a.className = "ark-btn ark-btn-ghost ark-btn-sm";
+                a.href = link.href;
+                a.target = "_blank";
+                a.rel = "noopener";
+                a.textContent = link.label;
+                box.appendChild(a);
+            });
+            host.appendChild(box);
+        }
+    }
+
+    document.getElementById("pv-submit").addEventListener("click", function () {
+        var button = this;
+        var clientName = document.getElementById("pv-client_name").value.trim();
+        var userName = document.getElementById("pv-user_name").value.trim();
+        if (!clientName) { toast("w", "an application name is required", 4000); return; }
+        if (!userName) { toast("w", "a user name or email is required", 4000); return; }
+
+        var payload = {
+            tenant_id: document.getElementById("pv-tenant_id").value || TENANT_ID,
+            client_name: clientName,
+            client_id: document.getElementById("pv-client_id").value.trim() || null,
+            client_logo: document.getElementById("pv-client_logo").value.trim() || null,
+            application_type: document.getElementById("pv-application_type").value,
+            redirect_uris: lines(document.getElementById("pv-redirect_uris").value),
+            user_name: userName,
+            user_display_name: document.getElementById("pv-user_display_name").value.trim() || null,
+            claims: (document.getElementById("pv-claims").value || "")
+                .split(",").map(function (c) { return c.trim(); }).filter(Boolean),
+            send_activation_email: document.getElementById("pv-send_activation_email").checked
+        };
+
+        button.disabled = true;
+        save(API + "/provision/client", payload).then(function (res) {
+            var d = res.data || {};
+            var facts = [
+                "Client " + d.client_id + " registered in tenant " + d.tenant_id + ".",
+                d.user_created
+                    ? (d.user_credential === "activation_email"
+                        ? "Account " + d.user_name + " created; an activation link has been emailed."
+                        : "Account " + d.user_name + " created on the configured default password.")
+                    : "Existing account " + d.user_name + " reused.",
+                d.mapping_created
+                    ? "Access mapping added with: " + (d.claims || []).join(", ") + "."
+                    : "That account was already mapped to this client; its claims were updated.",
+                (d.redirect_uris || []).length
+                    ? "Redirect URIs: " + d.redirect_uris.join(", ")
+                    : "No redirect URI registered yet - add one before the first sign-in."
+            ];
+            provisionResult("s", res.msg, facts, [
+                { label: "Setup page", href: d.setup_url },
+                { label: "Discovery", href: d.discovery }
+            ]);
+            provisionIdEdited = false;
+            document.getElementById("pv-client_name").value = "";
+            document.getElementById("pv-client_id").value = "";
+            document.getElementById("pv-redirect_uris").value = "";
+            document.getElementById("pv-client_logo").value = "";
+            paintLogo(document.getElementById("pv-logo-preview"), "", "");
+            return loadClients().then(loadUsers).then(loadClaims);
+        }).catch(function (err) {
+            // The refusals worth acting on carry a code; anything else is reported as it came.
+            var code = (err.payload && err.payload.code) || "";
+            var hint = code === "client_exists"
+                ? "Nothing was created. Pick a different name, or add the user to the existing client from the Access mapping panel."
+                : code === "unknown_tenant"
+                    ? "Create the tenant first, in the Tenants panel above."
+                    : "";
+            provisionResult("f", err.message, hint ? [hint] : null, null);
+        }).then(function () { button.disabled = false; },
+                function () { button.disabled = false; });
+    });
+
+    bindLogoField("pv");
+
+    // -------------------------------------------------------------- activation
+
+    /**
+     * The activation panel: both switches side by side.
+     *
+     * "Why can this person not sign in" is one question with two possible answers — the account
+     * is off, or the application is — and chasing it across two grids is how the wrong one gets
+     * flipped. Deactivating goes through /activation/{client|user} rather than a plain upsert
+     * because those endpoints also revoke the sessions and refresh tokens already handed out;
+     * without that the switch would not take effect until they aged out.
+     */
+    function activationRow(item) {
+        var row = el('<div class="ark-activation-row"><div class="ark-activation-main">' +
+            '<div class="ark-activation-name"></div><div class="ark-activation-sub"></div></div></div>');
+        row.dataset.active = item.active ? "true" : "false";
+        row.querySelector(".ark-activation-name").textContent = item.name;
+        row.querySelector(".ark-activation-sub").textContent = item.sub;
+
+        var badge = el('<span class="ark-badge"></span>');
+        badge.className = "ark-badge " + (item.active ? "ark-badge-ok" : "ark-badge-warn");
+        badge.textContent = item.active ? "active" : "deactivated";
+        row.appendChild(badge);
+
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = item.active ? "ark-btn-danger ark-btn-sm" : "ark-btn-sm";
+        button.textContent = item.active ? "Deactivate" : "Activate";
+        button.addEventListener("click", function () {
+            if (item.active && !confirm(item.confirm)) return;
+            button.disabled = true;
+            save(item.url, item.payload(!item.active))
+                .then(item.reload)
+                .catch(function () { button.disabled = false; });
+        });
+        row.appendChild(button);
+        return row;
+    }
+
+    function renderActivation() {
+        var filter = (document.getElementById("act-filter").value || "").toLowerCase().trim();
+        var matches = function (haystack) { return !filter || haystack.toLowerCase().indexOf(filter) > -1; };
+
+        var clientHost = document.getElementById("act-clients");
+        clientHost.innerHTML = "";
+        var clients = state.clients.filter(function (c) {
+            return matches((c.client_name || "") + " " + (c.display || "") + " " + c.client_id + " " + c.tenant_id);
+        });
+        if (!clients.length) {
+            clientHost.appendChild(el('<div class="ark-empty">No applications match.</div>'));
+        } else {
+            clients.forEach(function (c) {
+                clientHost.appendChild(activationRow({
+                    name: c.client_name || c.display || c.client_id,
+                    sub: c.client_id + " · " + c.tenant_id,
+                    active: c.is_active !== false,
+                    url: API + "/activation/client",
+                    confirm: "Deactivate '" + (c.client_name || c.client_id) + "'?\n\n" +
+                        "Sign-ins to it are refused with a message naming the application, and the " +
+                        "refresh tokens it already holds are revoked.",
+                    payload: function (active) {
+                        return { tenant_id: c.tenant_id, client_id: c.client_id, is_active: active };
+                    },
+                    reload: loadClients
+                }));
+            });
+        }
+
+        var userHost = document.getElementById("act-users");
+        userHost.innerHTML = "";
+        var users = state.users.filter(function (u) {
+            return matches((u.name || "") + " " + u.email + " " + (u.type || ""));
+        });
+        if (!users.length) {
+            userHost.appendChild(el('<div class="ark-empty">No accounts match.</div>'));
+        } else {
+            users.forEach(function (u) {
+                userHost.appendChild(activationRow({
+                    name: u.name || u.email,
+                    sub: u.email + (u.type && u.type !== "user" ? " · " + u.type : ""),
+                    active: u.is_active !== false,
+                    url: API + "/activation/user",
+                    confirm: "Deactivate '" + u.email + "'?\n\n" +
+                        "They are signed out everywhere, their refresh tokens are revoked, and the " +
+                        "sign-in page tells them the account is deactivated.",
+                    payload: function (active) { return { user_name: u.email, is_active: active }; },
+                    reload: loadUsers
+                }));
+            });
+        }
+    }
+
+    document.getElementById("act-filter").addEventListener("input", renderActivation);
 
     // -------------------------------------------------------------- new rows
 

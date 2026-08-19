@@ -28,6 +28,7 @@ namespace Ark.oAuth.Oidc.Endpoints
         public async Task<IActionResult> Integrate([FromRoute] string tenant_id, [FromRoute] string client_id)
         {
             NoStore();
+            FrameAncestorsSelf();
             var tenant = await ResolveTenantAsync(tenant_id);
 
             // Only a signed-in user of this tenant may view a client's setup details. Nothing
@@ -70,7 +71,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             var ep = Endpoints(tenant.tenant_id);
             return View("~/Views/Oidc/Integrate.cshtml", new IntegrationPageModel
             {
-                Brand = Brand(),
+                Brand = Brand(client),
                 TenantId = tenant.tenant_id,
                 Client = client,
                 Endpoints = ep,
@@ -79,13 +80,18 @@ namespace Ark.oAuth.Oidc.Endpoints
             });
         }
 
-        private OidcBrandModel Brand()
+        private OidcBrandModel Brand(ArkClient? client = null)
         {
             var cfg = ServerConfig.EmailConfig;
             return new OidcBrandModel
             {
                 HostLogo = cfg?.host_logo,
+                ClientLogo = string.IsNullOrWhiteSpace(client?.client_logo) ? null : client!.client_logo,
                 HostName = cfg?.host_company_display ?? cfg?.host_company_name ?? "Identity Provider",
+                ClientName = client == null
+                    ? null
+                    : new[] { client.client_name, client.display, client.name, client.client_id }
+                        .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
                 PrivacyUrl = cfg?.privacy_policy_url,
                 TermsUrl = cfg?.terms_url
             };

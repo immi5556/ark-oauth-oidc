@@ -16,8 +16,21 @@ namespace Ark.oAuth.Oidc.Endpoints
         public string? HostLogo { get; set; }
         public string? ClientLogo { get; set; }
         public string HostName { get; set; } = "Identity Provider";
+        /// <summary>The application being signed in to. Used as the client logo's alt text.</summary>
+        public string? ClientName { get; set; }
         public string? PrivacyUrl { get; set; }
         public string? TermsUrl { get; set; }
+
+        /// <summary>
+        /// How many of the two marks there are to draw — 0, 1 or 2.
+        ///
+        /// The header layout is driven off this rather than off two independent conditionals: a
+        /// lockup built for two logos and handed one leaves a gap where the other should be, and
+        /// handed none leaves an empty 44px band above the heading. Both cases are common —
+        /// most clients are registered without a logo — so each is laid out deliberately.
+        /// </summary>
+        public int LogoCount =>
+            (string.IsNullOrWhiteSpace(HostLogo) ? 0 : 1) + (string.IsNullOrWhiteSpace(ClientLogo) ? 0 : 1);
     }
 
     /// <summary>The sign-in page.</summary>

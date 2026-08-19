@@ -152,6 +152,83 @@ Signed in to the admin console, every registered client has a generated setup pa
 URIs and copy-paste snippets for the Ark client package, the raw ASP.NET Core handler,
 `oidc-client-ts`, Authlib and `go-oidc`.
 
+That page will also **run the flow for you**. Pick one of the client's redirect URIs and press
+*Start the flow*: the page generates a real `code_verifier` and `S256` `code_challenge` in your
+browser and runs the authorization request in an embedded iframe, ending on the redirect URI with
+the code and state in its query string. Nothing is simulated — it is the same request your
+application makes — and the verifier is shown alongside the `curl` that redeems the code, which is
+the fastest way to prove PKCE end to end before writing any client code. The frame ends up on the
+application's own origin, so if the application refuses to be framed, *Open in a new tab* runs the
+identical flow.
+
+## Provisioning API
+
+Standing up a new application is four operations in a fixed order: register the client, register
+its redirect URIs, create the account, and add the per-user-per-client access mapping. The last is
+the one that gets forgotten, and its absence looks exactly like a wrong password on the sign-in
+page. This does all four in one call.
+
+```http
+POST /api/oauth/v1/provision/client
+Content-Type: application/json
+
+{
+  "client_name": "Billing Portal",          // required
+  "user_name":   "jane@example.com",        // required - an email address or a plain username
+  "tenant_id":   "my_idp",                  // defaults to ark_oauth_server:TenantId
+  "client_id":   "billing_portal",          // derived from client_name when omitted
+  "client_logo": "https://…/logo.png",      // or a data: URI; shown on the sign-in page
+  "redirect_uris": [ "https://billing.example.com/signin-oidc" ],
+  "claims": [ "sub", "name", "email", "email_verified" ],
+  "send_activation_email": false
+}
+```
+
+```jsonc
+// 200
+{ "error": false, "code": "provisioned",
+  "msg": "client 'billing_portal' created in tenant 'my_idp' - the new user signs in with the configured default password.",
+  "data": { "client_id": "billing_portal", "client_created": true,
+            "user_name": "jane@example.com", "user_created": true,
+            "user_credential": "default_password", "mapping_created": true,
+            "issuer": "…", "discovery": "…", "setup_url": "…" } }
+
+// 409 - the name is taken. Nothing was written.
+{ "error": true, "code": "client_exists", "msg": "an application named 'Billing Portal' …" }
+```
+
+Collisions are handled asymmetrically on purpose. An existing **client name** is refused and
+nothing is written — quietly rewriting the redirect URIs of a live application would turn an
+onboarding script into a way to redirect somebody else's authorization codes. An existing **user**
+is reused and mapped to the new client, because that is exactly what happens when a person is
+given their second application.
+
+A user this call creates gets `ark_oauth_server:DefaultPw` and can sign in immediately. Set
+`send_activation_email` to email a link instead; the account then cannot sign in until it is used.
+
+The console's **Provision an application** panel is this endpoint with a form in front of it.
+
+## Deactivating a user or a client
+
+Both an account and an application can be switched off without being deleted, and the sign-in
+screen says which of the two it was — an application names itself, an account is told it has been
+deactivated and who to ask. Neither message is reachable without the correct password, so the one
+deliberately-vague message shown for every credentials failure still holds and the form cannot be
+used to enumerate accounts.
+
+```http
+POST /api/oauth/v1/activation/client   { "tenant_id": "my_idp", "client_id": "billing_portal", "is_active": false }
+POST /api/oauth/v1/activation/user     { "user_name": "jane@example.com", "is_active": false }
+```
+
+Deactivating revokes what has already been handed out — a client loses its refresh tokens, a user
+loses their sessions *and* their refresh tokens — because otherwise the switch would not take
+effect until they expired, up to fourteen days later. Access tokens already issued are
+self-contained and remain valid until they expire, which is the usual bound on revoking a JWT.
+
+The console's **Activation** panel shows both lists side by side. Both endpoints and both panels
+need the same authorization as the rest of the management API.
+
 ## Admin console
 
 The console ships in this package. Referencing it is all the wiring there is:
@@ -161,8 +238,9 @@ The console ships in this package. Referencing it is all the wiring there is:
 | Console | `/{tenant_id}/admin` (`/admin` redirects to the configured tenant) |
 | Its stylesheet and script | `/ark-admin/asset/ark-admin.css`, `/ark-admin/asset/ark-admin.js` |
 
-Tenants, clients, users, scopes, claims and the per-user-per-client access mapping, over the
-management API at `/api/oauth/v1/…`. The page is self-contained — no layout, `_ViewStart`, tag
+Tenants, clients, users, scopes, claims, the per-user-per-client access mapping, one-call
+provisioning and the two activation switches — all over the management API at
+`/api/oauth/v1/…`. The page is self-contained — no layout, `_ViewStart`, tag
 helper or `wwwroot` entry is required of the host, because the view brings its own shell and the
 two assets are served straight out of the assembly. Tabulator is its one external dependency,
 loaded pinned from unpkg.
@@ -181,6 +259,38 @@ be read and edited on disk; the served copies always come from the assembly.
 
 The v1 console at `/oauth/{tenant}/v1/server/{client_id}/manage` is still served for existing
 deployments and is no longer developed.
+
+## Branding
+
+The sign-in, consent and device pages show two marks in the header: the **host logo**, which says
+who is asking for the password, and the **client logo**, which says what is being signed in to.
+
+| Where it comes from | Setting |
+|---|---|
+| Host logo | `ark_oauth_server:EmailConfig:host_logo` |
+| Default client logo | `ark_oauth_server:EmailConfig:client_logo` |
+| Per-client logo | `client_logo` on the client — set it in the console's client editor, at provisioning time, or as `logo_uri` through dynamic registration |
+
+A client's own logo wins; the configured one is the fallback for every client that has not set
+one. Uploads through the console are inlined as a `data:` URI, so a logo needs no upload
+directory, no static file route and nothing extra to back up — keep them under 256 KB, since the
+value travels in every page that renders it.
+
+The header lays itself out for whichever marks exist: two get a divider between them, one gets the
+room both would have shared, and none promotes the host name to being the thing itself rather than
+a caption under an empty space. The admin console's top bar draws the same lockup.
+
+## Upgrading an existing database
+
+Schema changes ship as numbered scripts, applied through the migration endpoint:
+
+```
+GET /api/migration/v1/sql?action=up&name=00003_sql.sql   # 2.0.0 - protocol tables, RFC 7591 metadata
+GET /api/migration/v1/sql?action=up&name=00004_sql.sql   # 2.1.0 - users.is_active
+```
+
+00004 adds one additive, defaulted column, so every existing account stays active. A database
+created by 2.1.0 already has it and needs neither script.
 
 ## Before production
 

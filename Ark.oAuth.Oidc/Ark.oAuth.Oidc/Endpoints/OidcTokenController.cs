@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Ark.oAuth.Oidc.Protocol;
 
 namespace Ark.oAuth.Oidc.Endpoints
@@ -156,6 +157,18 @@ namespace Ark.oAuth.Oidc.Endpoints
                     await _grants.RevokeFamilyAsync(entry.family_id);
                     throw OAuthException.InvalidGrant("the session behind this refresh token has ended.");
                 }
+            }
+
+            // ...and so must the account. Deactivating a user revokes their refresh tokens, so
+            // this normally never fires; it is what makes the switch hold when the flag is set
+            // some other way, and it costs one indexed lookup on a grant that runs hourly at most.
+            // (A deactivated *client* never reaches here — ArkClientAuthenticator refuses it.)
+            var holder = await Ctx.users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.email.ToLower() == entry.subject.ToLower());
+            if (holder != null && !holder.is_active)
+            {
+                await _grants.RevokeFamilyAsync(entry.family_id);
+                throw OAuthException.InvalidGrant("the account this refresh token belongs to has been deactivated.");
             }
 
             var ctx = new TokenRequestContext

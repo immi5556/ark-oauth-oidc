@@ -110,8 +110,45 @@
             margin-bottom: 24px;
             text-align: center;
         }
-        .ark-brand img { max-height: 44px; max-width: 190px; object-fit: contain; }
         .ark-brand-name { font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--ark-fg-muted); }
+
+        /* Host mark | divider | client mark. */
+        .ark-lockup {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            max-width: 100%;
+        }
+        .ark-lockup img {
+            max-height: 38px;
+            max-width: 150px;
+            object-fit: contain;
+            display: block;
+        }
+        .ark-lockup-sep {
+            width: 1px;
+            align-self: stretch;
+            min-height: 26px;
+            background: var(--ark-border-strong);
+            flex: none;
+        }
+        /* One mark is the whole lockup, so it gets the room two would have shared rather than
+           sitting at half size in the middle of the card. */
+        .ark-brand[data-logos="1"] .ark-lockup img { max-height: 46px; max-width: 240px; }
+        /* With no mark at all the name stops being a caption under something and becomes the
+           thing itself — otherwise the card opens on a line of small grey text hanging in space. */
+        .ark-brand[data-logos="0"] { gap: 0; margin-bottom: 22px; }
+        .ark-brand[data-logos="0"] .ark-brand-name {
+            font-size: 15px;
+            font-weight: 650;
+            letter-spacing: -.01em;
+            color: var(--ark-fg);
+        }
+        @@media (max-width: 380px) {
+            .ark-lockup { gap: 11px; }
+            .ark-lockup img { max-height: 30px; max-width: 108px; }
+        }
 
         h1 { font-size: 21px; font-weight: 650; letter-spacing: -.015em; margin: 0 0 6px; text-align: center; }
         .ark-sub { margin: 0 0 24px; text-align: center; color: var(--ark-fg-muted); font-size: 14px; }
@@ -246,7 +283,6 @@
         }
         .ark-foot a { color: var(--ark-fg-muted); text-decoration: none; }
         .ark-foot a:hover { color: var(--ark-accent); text-decoration: underline; }
-        .ark-foot img { max-height: 26px; max-width: 110px; opacity: .75; object-fit: contain; }
 
         .ark-meta {
             margin-top: 20px;
@@ -282,10 +318,31 @@
 </head>
 <body>
     <main class="ark-card @(ViewBag.CardClass as string)">
-        <div class="ark-brand">
-            @if (!string.IsNullOrEmpty(brand.ClientLogo))
+        @*
+            Both marks sit in the header: the host's, because it identifies who is asking for the
+            password, and the client's, because it identifies what is being signed in to. Which
+            of the two exist is a per-client question — most clients are registered without a
+            logo — so the lockup is laid out from brand.LogoCount rather than from two
+            independent conditionals, and each of the three cases gets its own treatment instead
+            of leaving a gap or an empty band where a missing image would have been.
+        *@
+        <div class="ark-brand" data-logos="@brand.LogoCount">
+            @if (brand.LogoCount > 0)
             {
-                <img src="@brand.ClientLogo" alt="" />
+                <div class="ark-lockup">
+                    @if (!string.IsNullOrEmpty(brand.HostLogo))
+                    {
+                        <img src="@brand.HostLogo" alt="@brand.HostName" />
+                    }
+                    @if (brand.LogoCount == 2)
+                    {
+                        <span class="ark-lockup-sep" aria-hidden="true"></span>
+                    }
+                    @if (!string.IsNullOrEmpty(brand.ClientLogo))
+                    {
+                        <img src="@brand.ClientLogo" alt="@(brand.ClientName ?? "")" />
+                    }
+                </div>
             }
             <span class="ark-brand-name">@brand.HostName</span>
         </div>
@@ -293,10 +350,6 @@
     </main>
 
     <footer class="ark-foot">
-        @if (!string.IsNullOrEmpty(brand.HostLogo))
-        {
-            <img src="@brand.HostLogo" alt="" />
-        }
         @if (!string.IsNullOrEmpty(brand.PrivacyUrl))
         {
             <a href="@brand.PrivacyUrl" rel="noopener">Privacy</a>

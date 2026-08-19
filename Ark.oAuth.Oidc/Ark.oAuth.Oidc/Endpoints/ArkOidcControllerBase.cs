@@ -74,6 +74,24 @@ namespace Ark.oAuth.Oidc.Endpoints
             Response.Headers["Pragma"] = "no-cache";
         }
 
+        /// <summary>
+        /// Declares that this page may be framed by this origin and no other.
+        ///
+        /// Two things at once. It is the clickjacking protection the interactive pages never had:
+        /// a sign-in form that any site may frame can be overlaid and its keystrokes harvested,
+        /// and nothing on this server previously said otherwise. And it is what the client setup
+        /// page's live flow needs — that page embeds the authorization endpoint in an iframe on
+        /// the same origin, which this permits while still refusing every other origin.
+        ///
+        /// frame-ancestors is used rather than X-Frame-Options because the latter has no
+        /// "same origin plus nothing else" that browsers agree on, and it is ignored when a CSP
+        /// is present anyway.
+        /// </summary>
+        protected void FrameAncestorsSelf()
+        {
+            Response.Headers["Content-Security-Policy"] = "frame-ancestors 'self'";
+        }
+
         /// <summary>Reads a bearer token from the Authorization header.</summary>
         protected string? BearerToken()
         {

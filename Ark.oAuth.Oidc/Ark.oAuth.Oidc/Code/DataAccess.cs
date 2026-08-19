@@ -101,6 +101,11 @@ namespace Ark.oAuth.Oidc
                 _ctx.clients.Update(client);
             }
             await _ctx.SaveChangesAsync();
+            // The client editor has an is_active checkbox, so deactivation can arrive through a
+            // plain save as well as through the activation endpoint. Both have to revoke, or
+            // which control the operator happened to use decides whether the switch takes effect.
+            if (tt != null && tt.is_active && !client.is_active)
+                await RevokeRefreshTokensForClient(client.tenant_id, client.client_id);
             return client;
         }
         /// <summary>
@@ -310,7 +315,18 @@ namespace Ark.oAuth.Oidc
             ark.net.util.EmailUtil.IsValidFormat(id) ||
             System.Text.RegularExpressions.Regex.IsMatch(id, @"^[a-z0-9][a-z0-9._-]{1,63}$");
 
-        public async Task<ArkUser> UpsertUser(ArkUser user)
+        /// <param name="user">The account to create or update. <c>email</c> is the login identifier.</param>
+        /// <param name="sendActivationEmail">
+        /// Whether a brand-new account whose login id is an email address should be parked in
+        /// <c>reset_mode</c> and sent an activation link, which is what the console does.
+        ///
+        /// Provisioning passes false: it is driven by another system that has just told somebody
+        /// "your account is ready", and an account in reset_mode cannot sign in at all — it
+        /// answers the default password with "this account needs its password set", which is not
+        /// a message the caller can do anything about. False creates the account on the
+        /// configured default password instead, usable immediately.
+        /// </param>
+        public async Task<ArkUser> UpsertUser(ArkUser user, bool sendActivationEmail = true)
         {
             if (string.IsNullOrEmpty(user?.email)) throw new ApplicationException("a username or email is required.");
             user.email = user.email.ToLower().Trim();
@@ -328,7 +344,7 @@ namespace Ark.oAuth.Oidc
                 // Only an address can be sent an activation link. A username account has no
                 // mailbox, so it starts on the configured default password instead of being
                 // parked in reset_mode waiting for a mail that can never arrive.
-                if (ark.net.util.EmailUtil.IsValidFormat(user.email))
+                if (sendActivationEmail && ark.net.util.EmailUtil.IsValidFormat(user.email))
                 {
                     user.reset_mode = true;
                     // Creating the account is the operation being asked for; a template that
@@ -361,6 +377,11 @@ namespace Ark.oAuth.Oidc
                 _ctx.users.Update(user);
             }
             await _ctx.SaveChangesAsync();
+            // Same reasoning as UpsertClient: an account switched off through a plain save has to
+            // lose its live sessions and refresh tokens too, not only one switched off through
+            // the activation endpoint.
+            if (tt != null && tt.is_active && !user.is_active)
+                await RevokeAccessForSubject(user.email);
             return user;
         }
         public async Task<ArkUser> UserResetPw(ArkUser user)
@@ -399,6 +420,25 @@ namespace Ark.oAuth.Oidc
             else throw new ApplicationException("reset request expired, pls contact support.");
             return true;
         }
+        /// <summary>
+        /// Verifies a sign-in and, separately, that both the account and the application it is
+        /// signing in to are still active.
+        ///
+        /// The order of the checks is the whole point. Every credentials failure — unknown user,
+        /// wrong password, no access mapping — throws the same
+        /// <see cref="ApplicationException"/> and the sign-in page renders one message for all of
+        /// them, so the form cannot be used to work out which usernames exist. Deactivation is
+        /// different: it is not something a password can fix, and leaving the user to retype
+        /// credentials that are actually correct is the kind of "gentle" failure that costs a
+        /// support call. So the two activation switches are reported by their own exception type
+        /// (<see cref="ArkAccountInactiveException"/>) with the level that is off — but only
+        /// <b>after</b> the password has been verified, which is what keeps the distinction from
+        /// becoming an account oracle for anyone who does not already hold the credentials.
+        ///
+        /// A deactivated <i>client</i> never reaches here: the authorization endpoint refuses it
+        /// before the sign-in page is drawn at all. The check below is the backstop for the v1
+        /// endpoint, which posts credentials straight in.
+        /// </summary>
         public async Task<ArkUser> ValidateUserCreds(string un, string pw, string client, string tenant_id)
         {
             var usr = _ctx.users.FirstOrDefault(t => t.email.ToLower() == un.ToLower());
@@ -416,7 +456,88 @@ namespace Ark.oAuth.Oidc
             {
                 await UpdateStatus(un, retry: "reset");
             }
+            if (!clnt.is_active)
+                throw new ArkAccountInactiveException(ArkActivationLevel.Client,
+                    string.IsNullOrWhiteSpace(clnt.display) ? clnt.client_id : clnt.display);
+            if (!usr.is_active)
+                throw new ArkAccountInactiveException(ArkActivationLevel.User, usr.name ?? usr.email);
             return usr;
+        }
+        /// <summary>
+        /// Turns a client on or off, and — when turning it off — stops the access it has already
+        /// handed out.
+        ///
+        /// Flipping the flag alone only closes the front door: existing refresh tokens keep
+        /// minting access tokens for as long as they live (14 days by default), so an application
+        /// "deactivated" in the console would carry on working for a fortnight. Revoking the
+        /// client's refresh-token families is what makes the switch mean what it reads like.
+        /// Access tokens already issued are self-contained and stay valid until they expire —
+        /// an hour by default — which is the normal bound on any JWT-based revocation.
+        /// </summary>
+        public async Task<ArkClient> SetClientActive(string tenant_id, string client_id, bool active)
+        {
+            var cc = await GetClient(tenant_id, client_id)
+                ?? throw new ApplicationException($"unknown client '{client_id}' in tenant '{tenant_id}'.");
+            if (cc.is_active == active) return cc;
+
+            _ctx.ChangeTracker.Clear();
+            cc.is_active = active;
+            cc.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+            _ctx.clients.Update(cc);
+            await _ctx.SaveChangesAsync();
+
+            if (!active) await RevokeRefreshTokensForClient(cc.tenant_id, cc.client_id);
+            return cc;
+        }
+        /// <summary>
+        /// Turns an account on or off across every client on the server.
+        ///
+        /// Deactivating also ends the user's IdP sessions and revokes their refresh tokens, for
+        /// the same reason as <see cref="SetClientActive"/>: a signed-in browser holds a session
+        /// cookie that skips the sign-in page entirely, so without this the switch would not take
+        /// effect until that session aged out.
+        /// </summary>
+        public async Task<ArkUser> SetUserActive(string email, bool active)
+        {
+            var login_id = (email ?? "").ToLower().Trim();
+            var uu = await _ctx.users.FirstOrDefaultAsync(t => t.email == login_id)
+                ?? throw new ApplicationException($"unknown user '{login_id}'.");
+            if (uu.is_active == active) return uu;
+
+            _ctx.ChangeTracker.Clear();
+            uu.is_active = active;
+            uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+            _ctx.users.Update(uu);
+            await _ctx.SaveChangesAsync();
+
+            if (!active) await RevokeAccessForSubject(uu.email);
+            return uu;
+        }
+        /// <summary>Ends every live session for a subject and revokes the refresh tokens issued under them.</summary>
+        async Task RevokeAccessForSubject(string subject)
+        {
+            _ctx.ChangeTracker.Clear();
+            var sessions = await _ctx.sessions.Where(s => s.subject == subject && !s.revoked).ToListAsync();
+            foreach (var s in sessions) s.revoked = true;
+            if (sessions.Count > 0) _ctx.sessions.UpdateRange(sessions);
+
+            var tokens = await _ctx.refresh_tokens.Where(t => t.subject == subject && !t.revoked).ToListAsync();
+            foreach (var t in tokens) t.revoked = true;
+            if (tokens.Count > 0) _ctx.refresh_tokens.UpdateRange(tokens);
+
+            if (sessions.Count > 0 || tokens.Count > 0) await _ctx.SaveChangesAsync();
+        }
+        /// <summary>Revokes every live refresh token issued to one client.</summary>
+        async Task RevokeRefreshTokensForClient(string tenant_id, string client_id)
+        {
+            _ctx.ChangeTracker.Clear();
+            var tokens = await _ctx.refresh_tokens
+                .Where(t => t.tenant_id == tenant_id && t.client_id == client_id && !t.revoked)
+                .ToListAsync();
+            if (tokens.Count == 0) return;
+            foreach (var t in tokens) t.revoked = true;
+            _ctx.refresh_tokens.UpdateRange(tokens);
+            await _ctx.SaveChangesAsync();
         }
         public async Task<PkceCodeFlow?> GetPkceCode(string code, bool invalidate = false)
         {

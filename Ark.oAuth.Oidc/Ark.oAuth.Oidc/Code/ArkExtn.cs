@@ -483,6 +483,7 @@ namespace Ark.oAuth.Oidc
             services.AddScoped<TokenServer>();
             services.AddSingleton<ArkUtil>();
             services.AddScoped<Onboard>();
+            services.AddScoped<ArkProvisioning>();
 
             // standard OAuth 2.1 / OIDC protocol services
             services.AddMemoryCache();

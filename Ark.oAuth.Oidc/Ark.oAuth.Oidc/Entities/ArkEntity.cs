@@ -185,6 +185,15 @@ namespace Ark.oAuth
         public bool? emailed { get; set; } = false; // set to true, once email is sent successful 
         public string name { get; set; } // full name
         public string type { get; set; } = "user"; // type of account - defaul: null, 'user', 'service'
+        /// <summary>
+        /// Whether the account may sign in at all, anywhere on the server.
+        ///
+        /// The client-level switch is <see cref="ArkClient.is_active"/>; this is the user-level
+        /// one, and the two are reported separately at sign-in so the person in front of the
+        /// screen is told which of the two is off rather than being handed a credentials error
+        /// for something their password cannot fix.
+        /// </summary>
+        public bool is_active { get; set; } = true;
         public string at { get; set; }
     }
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
